@@ -1,0 +1,8 @@
+# Ignore everyting
+*
+
+# Except .Rmd files
+!*.Rmd
+
+# And .gitignore itself
+!.gitignore
