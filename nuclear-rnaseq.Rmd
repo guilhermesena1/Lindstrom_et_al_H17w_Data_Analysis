@@ -1,6 +1,5 @@
 ---
 title: "Fetal Kidney Data Analysis Functions"
-output: html_notebook
 ---
 
 # RUN THIS BEFORE EVERYTHING
@@ -13,7 +12,6 @@ library(igraph)
 library(pheatmap)
 library(WGCNA)
 library(mclust)
-data(geneList)
 
 # Cell Cycle Genes
 cc.genes <- read.table("info/ccgenes.txt", header=F, stringsAsFactors=F)$V1
@@ -26,7 +24,7 @@ genes.ensembl <- read.table("info/genes_ensembl.txt", header=F,row.names=2)
 
 # ligand receptorslib
 rl <- read.table("info/receptor_ligands.txt")
-
+# 
 # Prints to stderr
 cerr <- function (s) {
   write(s, stderr())
@@ -40,9 +38,9 @@ gg_color_hue <- function(n) {
 setwd("/media/sena/d/USC/Smithlab/Projects/Private/McMahon/Fetal_Organoid_Match")
 ```
 
-######################################################################################################
+#################################################################################################
 # SEURAT
-######################################################################################################
+#################################################################################################
 
 ## Helper functions to plot and save many figures
 ```{r}
@@ -189,9 +187,9 @@ FigureBomb <- function(srt, markers, out.dir) {
 }
 ```
 
-######################################################################################################
+#################################################################################################
 # MONOCLE
-######################################################################################################
+#################################################################################################
 
 ## Converts Seurat Object into Monocle Object and Run Monocle Pipeline
 ```{r}
@@ -389,9 +387,9 @@ plot_cell_trajectory <- function (cds, srt = NULL, x = 1, y = 2, color_by = "tre
 ```
 
 
-######################################################################################################
+#################################################################################################
 # WGCNA
-######################################################################################################
+#################################################################################################
 
 ## Transpose seurat data into WGCNA object
 ```{r}
@@ -572,9 +570,9 @@ ModuleDF <- function(datExpr, net, p.cutoff = 1e-3) {
 }
 ```
 
-######################################################################################################
+#################################################################################################
 # RECEPTOR-LIGAND ANALYSIS
-######################################################################################################
+#################################################################################################
 
 ## Returns full RL matrix given a RL table and a cutoff
 ```{r}
@@ -652,5 +650,27 @@ RLList <- function(srt, rl, ca, cb, cutoff = .5, de.only = T){
     return(NULL)
 }
 
+```
+
+#################################################################################################
+# SPATIAL RECONSTRUCTION
+#################################################################################################
+
+## Plots histogram with density
+```{r}
+hist.density <- function(srt, gene) {
+    vec <- srt@data[gene,]
+    plot.new()
+    par(mfrow = c(1,2))
+    hist(vec, breaks = 100, xlab = "Expression (normalized)", 
+         main = paste0("Histogram Expression of ",gene), probability = T)
+    
+    lines(density(vec), col = "red")
+    
+    hist(vec[vec > 1e-3], breaks = 100, xlab = "Expression (normalized)", 
+         main = paste0("Histogram Expression of ",gene), probability = T)
+    lines(density(vec[vec>1e-3]), col = "red")
+    
+}
 ```
 
