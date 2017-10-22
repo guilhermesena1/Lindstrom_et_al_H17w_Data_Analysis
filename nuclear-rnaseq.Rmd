@@ -19,12 +19,9 @@ cc.genes <- read.table("info/ccgenes.txt", header=F, stringsAsFactors=F)$V1
 # Kidney Marker Genes
 marker.genes <- read.table("info/markergenes.txt",header=F, stringsAsFactors = F)$V1
 
-# Ensembl to Symbol (HG19)
-genes.ensembl <- read.table("info/genes_ensembl.txt", header=F,row.names=2)
-
 # ligand receptorslib
 rl <- read.table("info/receptor_ligands.txt")
-# 
+
 # Prints to stderr
 cerr <- function (s) {
   write(s, stderr())
@@ -659,18 +656,27 @@ RLList <- function(srt, rl, ca, cb, cutoff = .5, de.only = T){
 ## Plots histogram with density
 ```{r}
 hist.density <- function(srt, gene) {
-    vec <- srt@data[gene,]
-    plot.new()
-    par(mfrow = c(1,2))
-    hist(vec, breaks = 100, xlab = "Expression (normalized)", 
-         main = paste0("Histogram Expression of ",gene), probability = T)
-    
-    lines(density(vec), col = "red")
-    
-    hist(vec[vec > 1e-3], breaks = 100, xlab = "Expression (normalized)", 
-         main = paste0("Histogram Expression of ",gene), probability = T)
-    lines(density(vec[vec>1e-3]), col = "red")
-    
+    if(gene %in% rownames(srt@data)) {
+        vec <- srt@data[gene,]
+        
+        mcl <- Mclust(vec[vec>0], G = 1:10)
+        print(paste0("Num levels: ", mcl$G))
+        
+        plot.new()
+        par(mfrow=c(1,2))
+        hist(vec, breaks = 100, xlab = "Expression (normalized)", 
+             main = paste0(gene, ". Levels = ", mcl$G), probability = T)
+        
+        lines(density(vec), col = "red")
+        
+        hist(vec[vec > 0], breaks = 100, xlab = "Nonzero Expression (normalized)", 
+             main = paste0(gene, ". Levels = ", mcl$G), probability = T)
+        lines(density(vec[vec > 0]), col = "red")
+        
+        plot(mcl, what="density")
+    } else {
+        print(paste0("Gene ", gene, " not expressed"))
+    }
 }
 ```
 
