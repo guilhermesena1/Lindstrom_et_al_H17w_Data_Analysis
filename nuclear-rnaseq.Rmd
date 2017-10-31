@@ -12,6 +12,7 @@ library(igraph)
 library(pheatmap)
 library(WGCNA)
 library(mclust)
+library(glmnet)
 
 # Cell Cycle Genes
 cc.genes <- read.table("info/ccgenes.txt", header=F, stringsAsFactors=F)$V1
@@ -32,7 +33,6 @@ gg_color_hue <- function(n) {
   hcl(h = hues, l = 65, c = 100)[1:n]
 }
 
-setwd("/media/sena/d/USC/Smithlab/Projects/Private/McMahon/Fetal_Organoid_Match")
 ```
 
 #################################################################################################
@@ -673,10 +673,87 @@ hist.density <- function(srt, gene) {
              main = paste0(gene, ". Levels = ", mcl$G), probability = T)
         lines(density(vec[vec > 0]), col = "red")
         
-        plot(mcl, what="density")
     } else {
         print(paste0("Gene ", gene, " not expressed"))
     }
 }
 ```
 
+## Calculates MCC based on binary reference
+```{r}
+cell.in.bin <- function(srt, levels) {
+    ans <- matrix(NA, nrow = ncol(srt@data), ncol = nrow(levels))
+    rownames(ans) <- colnames(srt@data)
+    colnames(ans) <- paste0("bin_", rownames(levels))
+    
+    genes <- colnames(levels)
+    genes <- genes[genes %in% rownames(srt@data)]
+    for(i in rownames(levels)) {
+        print(paste0("level ", i))
+        ans[,paste0("bin_",i)] <- apply(srt@data[genes,] > 0, 2, 
+            function(x){ 
+                y <- levels[i,]
+                tp <- sum(x &  y)
+                tn <- sum(!x & !y)
+                fp <- sum(x & !y)
+                fn <-  sum(!x & y)
+                
+                den <- sqrt((tp+fp)*(tp+fn)*(tn+fp)*(tn+fn))
+                if(den == 0) {
+                    return (0)
+                }
+                exp((tp*tn - fp*fn)/den) - exp(-1)
+            })
+    }
+    
+    ans
+}
+```
+
+## Makes boxplot of MCC values by cluster
+```{r}
+BoxFeatureByCluster <- function(srt, which) {
+  df <- data.frame(srt@data.info[, which])
+  rownames(df) <- rownames(srt@data.info)
+  colors <- gg_color_hue(length(unique(srt@ident)))
+
+  df$cluster <- factor(srt@data.info[rownames(df),]$tree.ident)
+  df$color <- colors[df$cluster]
+  
+  colnames(df) <- c("feature", "cluster", "color")
+  
+  ggplot(df, aes(cluster, feature)) + geom_boxplot(fill = colors)
+}
+```
+
+
+## Imputation of genes using LASSO
+```{r}
+impute.lasso <- function(srt, gene) {
+    genes.all <- rownames(srt@data)
+    genes.use <- genes.all[genes.all != gene]
+    ta <- t(srt@data[genes.use,])
+    tb <- srt@data[gene,]
+    fit <- cv.glmnet(ta, tb)
+    
+    predict(fit, ta, s = fit$lambda.min)
+}
+```
+
+## Fills the @imputed slot on the seurat object
+```{r}
+ImputeMarkers <- function(srt, markers) {
+    # Impúte with CV Lasso
+    srt@imputed <- data.frame(sapply(as.character(markers), function(x) {impute.lasso(srt.14w.nephro, x)}))
+    
+    # Converts to 2 mixture model
+    # srt@imputed <- data.frame(apply(srt@imputed, 2, function(x) {
+    #    Mclust(x, G = 2)$classification
+    #}))
+    
+    rownames(srt@imputed) <- colnames(srt@data)
+    colnames(srt@imputed) <- markers
+    srt
+}
+
+```
