@@ -8,7 +8,7 @@
 !*.txt
 
 # Even if they are in directories
-!*/
+!*/info/
 
 # And .gitignore itself
 !.gitignore
