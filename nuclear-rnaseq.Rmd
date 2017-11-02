@@ -692,17 +692,7 @@ cell.in.bin <- function(srt, levels) {
         print(paste0("level ", i))
         ans[,paste0("bin_",i)] <- apply(srt@data[genes,] > 0, 2, 
             function(x){ 
-                y <- levels[i,]
-                tp <- sum(x &  y)
-                tn <- sum(!x & !y)
-                fp <- sum(x & !y)
-                fn <-  sum(!x & y)
-                
-                den <- sqrt((tp+fp)*(tp+fn)*(tn+fp)*(tn+fn))
-                if(den == 0) {
-                    return (0)
-                }
-                exp((tp*tn - fp*fn)/den) - exp(-1)
+                MCC(x, levels[i,])
             })
     }
     
@@ -757,3 +747,19 @@ ImputeMarkers <- function(srt, markers) {
 }
 
 ```
+
+## Calculates MCC
+```{r}
+MCC <- function(truth, sample) {
+    tp <- sum(truth & sample)
+    fp <- sum(truth & !sample)
+    fn <- sum(!truth & sample)
+    tn <- sum(!truth & !sample)
+    den <- sqrt((tp+fp)*(tp+fn)*(tn+fp)*(tn+fn))
+    if(den == 0) {
+        return (0)
+    }
+    exp((tp*tn - fp*fn)/den) - exp(-1)
+}
+```
+
