@@ -681,16 +681,16 @@ hist.density <- function(srt, gene) {
 
 ## Calculates MCC based on binary reference
 ```{r}
-cell.in.bin <- function(srt, levels) {
-    ans <- matrix(NA, nrow = ncol(srt@data), ncol = nrow(levels))
-    rownames(ans) <- colnames(srt@data)
+mcc.bin.scores <- function(df, levels) {
+    ans <- matrix(NA, nrow = ncol(df), ncol = nrow(levels))
+    rownames(ans) <- colnames(df)
     colnames(ans) <- paste0("bin_", rownames(levels))
     
     genes <- colnames(levels)
-    genes <- genes[genes %in% rownames(srt@data)]
+    genes <- genes[genes %in% rownames(df)]
     for(i in rownames(levels)) {
         print(paste0("level ", i))
-        ans[,paste0("bin_",i)] <- apply(srt@data[genes,] > 0, 2, 
+        ans[,paste0("bin_",i)] <- apply(df[genes,] > 0, 2, 
             function(x){ 
                 MCC(x, levels[i,])
             })
@@ -759,7 +759,45 @@ MCC <- function(truth, sample) {
     if(den == 0) {
         return (0)
     }
-    exp((tp*tn - fp*fn)/den) - exp(-1)
+    ans <- (tp*tn - fp*fn)/den
+
+    max(10*ans,0)
+}
+```
+
+## Null model construction: Permutate dataset
+```{r}
+permutate.markers <- function(srt, markers, n.times = 50) {
+    df <- srt@data[markers,]
+    ans <- NULL
+    for(i in 1:n.times) {
+        print(i)
+         # Permutates all rows
+         for(i in markers) {
+            df[i,] <- sample(df[i,])
+        }
+        ans <- cbind(ans, as.matrix(df))
+    }
+    
+    ans
+}
+```
+
+## Cell p-values based on null model
+```{r}
+pval.null <- function(df, null.model) {
+    w <- 0
+    apply(df, 1, function(x) {
+        w <- w+1
+
+        ans <- rep(0, ncol(null.model))
+        for(i in 1:(floor(nrow(null.model)/10))) {
+            ans <- ans + ifelse(x <= null.model[i,],1,0)
+        }
+        
+        print(paste0("done ",w))
+        ans / nrow(null.model)
+    })
 }
 ```
 
