@@ -90,7 +90,7 @@ diff.heatmap <- function(srt, mark, n = 20, p.cutoff = 1e-5) {
   mark %>% group_by(cluster) %>% top_n(n, avg_logFC) -> topn
   # setting slim.col.label to TRUE will print just the cluster IDS instead of every cell name
   DoHeatmap(srt, genes.use = topn$gene,  
-            slim.col.label = TRUE, remove.key = TRUE, draw.line = T)
+            slim.col.label = TRUE, remove.key = TRUE, draw.line = T, cells.use = 1000)
 }
 ```
 
@@ -180,6 +180,61 @@ FigureBomb <- function(srt, diffexp, markers, out.dir) {
     # Diff Expr table
     write.table(diffexp, file = paste0(out.dir, "/DiffExpr.tsv"), quote=F,sep="\t")
 }
+```
+
+## Plot Feature from metadata
+```{r}
+TSNEPlotFeature <- function(srt, feats) {
+    plotlist <- list()
+    for(which in feats) {
+        df <- data.frame(x = srt@dr$tsne@cell.embeddings[,1], 
+                         y = srt@dr$tsne@cell.embeddings[,2], 
+                         feat = as.numeric(srt@meta.data[, which]))
+    
+        plotlist[[which]] <- ggplot(df, aes(x = x, y = y, color = feat)) + 
+            geom_point() + 
+            scale_colour_gradient(low = "lightgray", high = "red") + 
+            ggtitle(which)
+    }
+    
+    multiplot(plotlist = plotlist, cols = floor(sqrt(length(plotlist))))
+}
+multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
+  library(grid)
+
+  # Make a list from the ... arguments and plotlist
+  plots <- c(list(...), plotlist)
+
+  numPlots = length(plots)
+
+  # If layout is NULL, then use 'cols' to determine layout
+  if (is.null(layout)) {
+    # Make the panel
+    # ncol: Number of columns of plots
+    # nrow: Number of rows needed, calculated from # of cols
+    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
+                    ncol = cols, nrow = ceiling(numPlots/cols))
+  }
+
+ if (numPlots==1) {
+    print(plots[[1]])
+
+  } else {
+    # Set up the page
+    grid.newpage()
+    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+
+    # Make each plot, in the correct location
+    for (i in 1:numPlots) {
+      # Get the i,j matrix positions of the regions that contain this subplot
+      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+
+      print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
+                                      layout.pos.col = matchidx$col))
+    }
+  }
+}
+
 ```
 
 #################################################################################################
@@ -690,7 +745,7 @@ mcc.bin.scores <- function(df, levels) {
         print(paste0("level ", i))
         ans[,paste0("bin_",i)] <- apply(df[genes,] > 0, 2, 
             function(x){ 
-                MCC(x, levels[i,])
+               MCC(x, levels[i,])
             })
     }
     
@@ -759,7 +814,7 @@ MCC <- function(truth, sample) {
     }
     ans <- (tp*tn - fp*fn)/den
 
-    max(10*ans,0)
+    ans
 }
 ```
 
@@ -784,15 +839,17 @@ permutate.markers <- function(srt, markers, n.times = 50) {
 ## Cell p-values based on null model
 ```{r}
 pval.null <- function(df, null.model) {
-    w <- 0
+    ecdfs <- list()
+    for(i in 1:ncol(null.model)) {
+      ecdfs[[i]] <- ecdf(null.model[,i])
+    }
+    
     apply(df, 1, function(x) {
         ans <- rep(0, ncol(null.model))
-        vals.use <- 1:nrow(null.model)
-        for(i in vals.use) {
-            ans <- ans + ifelse(x <= null.model[i,],1,0)
+        for(i in 1:ncol(null.model)) {
+          ans [i]<- 1 - ecdfs[[i]](x[i]) 
         }
-        
-        ans /length(vals.use)
+        ans
     })
 }
 ```
