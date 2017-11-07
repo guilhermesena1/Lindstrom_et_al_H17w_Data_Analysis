@@ -51,9 +51,8 @@ FeatureAll <- function(srt, marker.genes, out.dir) {
   }
 }
 
-FeatureTopDiff <- function(srt, out.dir, n = 10) {
-  mark <- srt@cluster.markers
-  mark %>% group_by(cluster) %>% top_n(n, avg_diff) -> topn
+FeatureTopDiff <- function(srt, mark, out.dir, n = 10) {
+  mark %>% group_by(cluster) %>% top_n(n, avg_logFC) -> topn
   for(i in unique(topn$cluster)) {
       genes <- topn[topn$cluster == i,]$gene
       FeatureAll(srt, genes, sprintf(paste0(out.dir, "/cluster_%s"),i))
@@ -73,7 +72,7 @@ ViolinAll <- function(srt, marker.genes, out.dir) {
 # Save all PCs
 PCAll <- function(srt, out.path) {
   print(out.path)
-  for(i in srt@pcs.to.keep) {
+  for(i in 1:48) {
     print(PCHeatmap(srt, pc.use = i, cells.use = 100, do.balanced = T, label.columns = F))
     dev.print(pdf, file = sprintf(paste0(out.path, "/PC%s.pdf"), i), width = 9, height = 15)
   }
@@ -86,12 +85,11 @@ PCAll <- function(srt, out.path) {
 
 ## Heatmap of top DE genes based on average difference
 ```{r}
-diff.heatmap <- function(srt, n = 20, p.cutoff = 1e-5) {
-  mark <- srt@cluster.markers
-  mark <- mark[mark$p_val < p.cutoff, ]
-  mark %>% group_by(cluster) %>% top_n(n, avg_diff) -> topn
+diff.heatmap <- function(srt, mark, n = 20, p.cutoff = 1e-5) {
+  mark <- mark[mark$p_val_adj < p.cutoff, ]
+  mark %>% group_by(cluster) %>% top_n(n, avg_logFC) -> topn
   # setting slim.col.label to TRUE will print just the cluster IDS instead of every cell name
-  DoHeatmap(srt, genes.use = topn$gene, order.by.ident = TRUE, 
+  DoHeatmap(srt, genes.use = topn$gene,  
             slim.col.label = TRUE, remove.key = TRUE, draw.line = T)
 }
 ```
@@ -157,7 +155,7 @@ FindClustersSemi <- function(srt, mtx, k.iter = 5:50) {
 
 ## Plots a bunch of figures to a directory
 ```{r}
-FigureBomb <- function(srt, markers, out.dir) {
+FigureBomb <- function(srt, diffexp, markers, out.dir) {
     # PCS
     PCAll(srt, out.path = paste0(out.dir,"/Principal_Components"))
     
@@ -166,21 +164,21 @@ FigureBomb <- function(srt, markers, out.dir) {
     dev.print(pdf, file = paste0(out.dir, "/TSNE.pdf"), width = 8, height = 4.5)
     
     # Top 20 diff
-    diff.heatmap(srt, n = 20, p.cutoff = 1e-2)
+    diff.heatmap(srt, diffexp, n = 20, p.cutoff = 1e-2)
     dev.print(pdf, file = paste0(out.dir, "/Top20_DiffExpr.pdf", width = 16, height = 70))
     
     # Top 5 diff
-    diff.heatmap(srt, n = 5, p.cutoff = 1e-2)
+    diff.heatmap(srt, diffexp, n = 5, p.cutoff = 1e-2)
     dev.print(pdf, file = paste0(out.dir, "/Top5_DiffExpr.pdf", width = 16, height = 30))
     
     # Feature plots of marker genes
     FeatureAll(srt, markers, paste0(out.dir, "/Feature_Plots/markers"))
     
     # Features of top diff
-    FeatureTopDiff(srt, paste0(out.dir, "/Feature_Plots/clusters"), n = 10)
+     FeatureTopDiff(srt, diffexpr, paste0(out.dir, "/Feature_Plots/clusters"), n = 10)
     
     # Diff Expr table
-    write.table(srt@cluster.markers, file = paste0(out.dir, "/DiffExpr.tsv"), quote=F,sep="\t")
+    write.table(diffexp, file = paste0(out.dir, "/DiffExpr.tsv"), quote=F,sep="\t")
 }
 ```
 
@@ -788,15 +786,13 @@ permutate.markers <- function(srt, markers, n.times = 50) {
 pval.null <- function(df, null.model) {
     w <- 0
     apply(df, 1, function(x) {
-        w <- w+1
-
         ans <- rep(0, ncol(null.model))
-        for(i in 1:(floor(nrow(null.model)/10))) {
+        vals.use <- 1:nrow(null.model)
+        for(i in vals.use) {
             ans <- ans + ifelse(x <= null.model[i,],1,0)
         }
         
-        print(paste0("done ",w))
-        ans / nrow(null.model)
+        ans /length(vals.use)
     })
 }
 ```
