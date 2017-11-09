@@ -193,7 +193,7 @@ TSNEPlotFeature <- function(srt, feats) {
     
         plotlist[[which]] <- ggplot(df, aes(x = x, y = y, color = feat)) + 
             geom_point() + 
-            scale_colour_gradient(low = "lightgray", high = "red") + 
+            scale_colour_gradient(low = "lightgray", high = "red", na.value = "red") + 
             ggtitle(which)
     }
     
@@ -741,9 +741,16 @@ mcc.bin.scores <- function(df, levels) {
     
     genes <- colnames(levels)
     genes <- genes[genes %in% rownames(df)]
+    
+    # Restricts to markers and binarize
+    df <- df[genes,]
+    df <- df > 0
+    
+    levels <- levels > 0
+    
     for(i in rownames(levels)) {
         print(paste0("level ", i))
-        ans[,paste0("bin_",i)] <- apply(df[genes,] > 0, 2, 
+        ans[,paste0("bin_",i)] <- apply(df, 2, 
             function(x){ 
                MCC(x, levels[i,])
             })
@@ -756,16 +763,17 @@ mcc.bin.scores <- function(df, levels) {
 ## Makes boxplot of MCC values by cluster
 ```{r}
 BoxFeatureByCluster <- function(srt, which) {
-  df <- data.frame(srt@data.info[, which])
-  rownames(df) <- rownames(srt@data.info)
+  df <- data.frame(srt@meta.data[, which])
+  df[is.na(df)] <- max(df)
+  rownames(df) <- rownames(srt@meta.data)
   colors <- gg_color_hue(length(unique(srt@ident)))
 
-  df$cluster <- factor(srt@data.info[rownames(df),]$tree.ident)
+  df$cluster <- factor(srt@meta.data[rownames(df),]$tree.ident)
   df$color <- colors[df$cluster]
   
   colnames(df) <- c("feature", "cluster", "color")
   
-  ggplot(df, aes(cluster, feature)) + geom_boxplot(fill = colors)
+  ggplot(df, aes(cluster, feature)) + geom_boxplot(fill = colors) + ylab(which)
 }
 ```
 
@@ -825,11 +833,7 @@ permutate.markers <- function(srt, markers, n.times = 50) {
     ans <- NULL
     for(i in 1:n.times) {
         print(i)
-         # Permutates all rows
-         for(i in markers) {
-            df[i,] <- sample(df[i,])
-        }
-        ans <- cbind(ans, as.matrix(df))
+        ans <- cbind(ans, t(apply(df, 1, sample)))
     }
     
     ans
