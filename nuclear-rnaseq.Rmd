@@ -90,7 +90,7 @@ diff.heatmap <- function(srt, mark, n = 20, p.cutoff = 1e-5) {
   mark %>% group_by(cluster) %>% top_n(n, avg_logFC) -> topn
   # setting slim.col.label to TRUE will print just the cluster IDS instead of every cell name
   DoHeatmap(srt, genes.use = topn$gene,  
-            slim.col.label = TRUE, remove.key = TRUE, draw.line = T, cells.use = 1000)
+            slim.col.label = TRUE, remove.key = TRUE, draw.line = T)
 }
 ```
 
@@ -155,28 +155,41 @@ FindClustersSemi <- function(srt, mtx, k.iter = 5:50) {
 
 ## Plots a bunch of figures to a directory
 ```{r}
-FigureBomb <- function(srt, diffexp, markers, out.dir) {
+FigureBomb <- function(srt, diffexp, markers, out.dir, do.pcs = T, do.tsne = T, 
+                       do.markers = T, do.topclusts = T,
+                       do.top5 = T, do.top20 = T) {
     # PCS
-    PCAll(srt, out.path = paste0(out.dir,"/Principal_Components"))
+    if(do.pcs) {
+        PCAll(srt, out.path = paste0(out.dir,"/Principal_Components"))
+    }
     
     # TSNE
-    print(TSNEPlot(srt, do.label=T))
-    dev.print(pdf, file = paste0(out.dir, "/TSNE.pdf"), width = 8, height = 4.5)
+    if(do.tsne) {
+        print(TSNEPlot(srt, do.label=T))
+        dev.print(pdf, file = paste0(out.dir, "/TSNE.pdf"), width = 16, height = 9)
+    }
     
     # Top 20 diff
-    diff.heatmap(srt, diffexp, n = 20, p.cutoff = 1e-2)
-    dev.print(pdf, file = paste0(out.dir, "/Top20_DiffExpr.pdf", width = 16, height = 70))
+    if(do.top20) {
+        diff.heatmap(srt, diffexp, n = 20, p.cutoff = 1e-2)
+        dev.print(pdf, file = paste0(out.dir, "/Top20_DiffExpr.pdf", width = 16, height = 70))
+    }
     
     # Top 5 diff
-    diff.heatmap(srt, diffexp, n = 5, p.cutoff = 1e-2)
-    dev.print(pdf, file = paste0(out.dir, "/Top5_DiffExpr.pdf", width = 16, height = 30))
+    if(do.top5) {
+        diff.heatmap(srt, diffexp, n = 5, p.cutoff = 1e-2)
+        dev.print(pdf, file = paste0(out.dir, "/Top5_DiffExpr.pdf", width = 16, height = 30))
+    }
     
     # Feature plots of marker genes
-    FeatureAll(srt, markers, paste0(out.dir, "/Feature_Plots/markers"))
+    if(do.markers){
+        FeatureAll(srt, markers, paste0(out.dir, "/Feature_Plots/markers"))
+    }
     
     # Features of top diff
-     FeatureTopDiff(srt, diffexpr, paste0(out.dir, "/Feature_Plots/clusters"), n = 10)
-    
+    if(do.topclusts) {
+        FeatureTopDiff(srt, diffexp, paste0(out.dir, "/Feature_Plots/clusters"), n = 10)
+    }
     # Diff Expr table
     write.table(diffexp, file = paste0(out.dir, "/DiffExpr.tsv"), quote=F,sep="\t")
 }
@@ -234,8 +247,44 @@ multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
     }
   }
 }
-
 ```
+
+```{r}
+PlotUnique <- function(srt, diffexp, out.dir, do.violin = F) {
+    genes <- diffexp$gene
+    unique.genes <- genes[!(duplicated(genes) | duplicated(genes, fromLast=T))]
+    for(i in unique(diffexp$cluster)) {
+        genes.plot <- unique(diffexp$gene[diffexp$cluster == i])
+        genes.plot <- genes.plot[genes.plot %in% unique.genes]
+        genes.plot <- genes.plot[1:(min(50, length(genes.plot)))]
+        if(!do.violin) {
+            FeatureAll(srt, genes.plot, paste0(out.dir, "/cluster_",i))
+        } else {
+            ViolinAll(srt, genes.plot, paste0(out.dir, "/cluster_",i))
+        }
+    }
+}
+```
+
+
+## Adds iteration to tSNE
+```{r}
+RunMoreTSNE <- function(srt, n.iter = 1000, pcs.use = 1:50, verbose = T) {
+    res <- Rtsne(srt@dr$pca@cell.embeddings[, pcs.use], 
+                 max_iter = n.iter, 
+                 pca = F, 
+                 Y_init = srt@dr$tsne@cell.embeddings,
+                 verbose = verbose)$Y
+    
+    colnames(res) <- c("tSNE_1", "tSNE_2")
+    rownames(res) <- rownames(srt@dr$pca@cell.embeddings)
+    
+    srt@dr$tsne@cell.embeddings <- res
+    
+    srt
+}
+```
+
 
 #################################################################################################
 # MONOCLE
@@ -734,7 +783,7 @@ hist.density <- function(srt, gene) {
 
 ## Calculates MCC based on binary reference
 ```{r}
-mcc.bin.scores <- function(df, levels) {
+mcc.bin.scores <- function(df, levels, q = .4) {
     ans <- matrix(NA, nrow = ncol(df), ncol = nrow(levels))
     rownames(ans) <- colnames(df)
     colnames(ans) <- paste0("bin_", rownames(levels))
@@ -742,17 +791,21 @@ mcc.bin.scores <- function(df, levels) {
     genes <- colnames(levels)
     genes <- genes[genes %in% rownames(df)]
     
-    # Restricts to markers and binarize
-    df <- df[genes,]
-    df <- df > 0
     
+    df <- t(apply(df, 1, function (x){
+        if(var(x) > 0.01){
+            return(Mclust(x, G = 2)$z[,2])
+        }
+        return (rep(0, length(x)))
+    }))
+
     levels <- levels > 0
     
     for(i in rownames(levels)) {
         print(paste0("level ", i))
         ans[,paste0("bin_",i)] <- apply(df, 2, 
             function(x){ 
-               MCC(x, levels[i,])
+               MCC.prob(x, levels[i,])
             })
     }
     
@@ -763,15 +816,18 @@ mcc.bin.scores <- function(df, levels) {
 ## Makes boxplot of MCC values by cluster
 ```{r}
 BoxFeatureByCluster <- function(srt, which) {
-  df <- data.frame(srt@meta.data[, which])
-  df[is.na(df)] <- max(df)
+  df <- srt@meta.data[, which]
+  df[is.infinite(df)] <- max(df[!is.infinite(df)])
+  df <- data.frame(df)
   rownames(df) <- rownames(srt@meta.data)
   colors <- gg_color_hue(length(unique(srt@ident)))
 
-  df$cluster <- factor(srt@meta.data[rownames(df),]$tree.ident)
+  df$cluster <- factor(srt@ident)
   df$color <- colors[df$cluster]
   
+  
   colnames(df) <- c("feature", "cluster", "color")
+  print(head(df))
   
   ggplot(df, aes(cluster, feature)) + geom_boxplot(fill = colors) + ylab(which)
 }
@@ -785,9 +841,12 @@ impute.lasso <- function(srt, gene) {
     genes.use <- genes.all[genes.all != gene]
     ta <- t(srt@data[genes.use,])
     tb <- srt@data[gene,]
-    fit <- cv.glmnet(ta, tb)
-    
-    predict(fit, ta, s = fit$lambda.min)
+    tryCatch({
+        fit <- cv.glmnet(ta, tb)
+        nonzero <- sum( predict(fit, ta, type="coefficients") > 0)
+        print(paste0(nonzero, " nonzero genes for ", gene))
+        predict(fit, ta, type = "response", s = fit$lambda.min)
+    }, error = function(err) { print(err); return(tb)} )
 }
 ```
 
@@ -795,7 +854,7 @@ impute.lasso <- function(srt, gene) {
 ```{r}
 ImputeMarkers <- function(srt, markers) {
     # Impúte with CV Lasso
-    srt@imputed <- data.frame(sapply(as.character(markers), function(x) {impute.lasso(srt.14w.nephro, x)}))
+    srt@imputed <- data.frame(sapply(as.character(markers), function(x) {impute.lasso(srt, x)}))
     
     # Converts to 2 mixture model
     # srt@imputed <- data.frame(apply(srt@imputed, 2, function(x) {
@@ -826,10 +885,31 @@ MCC <- function(truth, sample) {
 }
 ```
 
+## Probabilistic MCC
+```{r}
+MCC.prob <- function(sample, truth) {
+    prob.on <- sample
+    prob.off <- 1 - sample
+    tp <- sum(prob.on[truth])
+    tn <- sum(prob.off[!truth])
+    fp <- sum(prob.on[!truth])
+    fn <- sum(prob.off[truth])
+    
+    den <- sqrt((tp+fp)*(tp+fn)*(tn+fp)*(tn+fn))
+    if(den == 0) {
+        return (0)
+    }
+    ans <- (tp*tn - fp*fn)/den
+
+    ans
+}
+```
+
+
 ## Null model construction: Permutate dataset
 ```{r}
 permutate.markers <- function(srt, markers, n.times = 50) {
-    df <- srt@data[markers,]
+    df <- t(srt@imputed)
     ans <- NULL
     for(i in 1:n.times) {
         print(i)
@@ -855,6 +935,89 @@ pval.null <- function(df, null.model) {
         }
         ans
     })
+}
+```
+
+
+```{r}
+SelectPositiveCells <- function(srt, pvals, fdr = .1) {
+    ans <- matrix(NA, nrow = nrow(pvals), ncol = ncol(srt@data))
+    colnames(ans) <- colnames(srt@data)
+    rownames(ans) <- rownames(pvals)
+    
+    for(i in 1:nrow(pvals)) {
+        fs <- 1:ncol(ans)*fdr/ncol(ans)
+        ps <- sort(pvals[i,])
+        select <- (ps <= fs)
+        names(select) <- names(ps)
+        ans[i,] <- select[colnames(ans)]
+    }
+    
+    ans
+}
+```
+
+## Runs spatial reconstruction on seurat object
+```{r}
+DoSpatialReconstruction <- function(srt, levels, 
+                                    num.shuffle = 100, fdr = .1, 
+                                    q = 0, do.overwrite = F,
+                                    mcc.null = NULL) {
+    genes <- colnames(levels)
+    
+    if(is.null(mcc.null)) {
+        write("permutating data", stderr())
+        df.null <- permutate.markers(srt, colnames(levels), num.shuffle)
+        write("Calculating MCCs for null", stderr())
+        mcc.null <- mcc.bin.scores(df.null, levels, q = q)
+    }
+    
+    write("Calculating MCCs for data", stderr())
+    mcc.df <-  mcc.bin.scores(srt@data[genes,], levels, q = q)
+    
+    write("Finding p values", stderr())
+    pvals <- pval.null(mcc.df, mcc.null)
+    
+    write(paste0("Selecting positive cells with fdr ", fdr), stderr())
+    cells.select <- SelectPositiveCells(srt, pvals, fdr)
+        
+    if(do.overwrite) {
+        for(i in 1:nrow(levels)) {
+            srt <- AddMetaData(srt, -log(pvals[i,]), paste0("logp_",i))
+        }
+        
+        for(i in 1:nrow(levels)) {
+            srt <- AddMetaData(srt, cells.select[i,], paste0("keep_",i,"_fdr_",fdr))
+        }
+        return(srt)
+    }
+    
+    return(sum(colSums(cells.select)>0))
+}
+```
+
+
+```{r}
+BestSpatialReconstruction <- function(srt, levels, num.shuffle = 100, fdr = .1, quantiles = seq(from = 0, to = 1, length.out = 20)) {
+    best.q <- 0
+    max.num <- 0
+    for(q in quantiles) {
+        num <- DoSpatialReconstruction(srt, levels, num.shuffle, .1, q, F)
+        print(paste0("Cells for quantile ",q," = ", num))
+        if(num > max.num ){
+            max.num <- num
+            best.q <- q
+        }
+    }
+    
+    DoSpatialReconstruction(srt, levels, num.shuffle, fdr, best.q, do.overwrite = T)
+}
+```
+
+
+```{r}
+vst <- function(x, a, b, c) {
+    log(2*sqrt(a)*sqrt(x*(a*x+b)+c)+2*a*x+b)/sqrt(a)
 }
 ```
 
