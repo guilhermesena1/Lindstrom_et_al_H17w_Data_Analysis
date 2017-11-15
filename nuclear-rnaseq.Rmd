@@ -64,7 +64,7 @@ ViolinAll <- function(srt, marker.genes, out.dir) {
   for(i in marker.genes) {
     if(i %in% rownames(srt@scale.data)){
       print(VlnPlot(srt, i))
-      dev.print(pdf, file = sprintf(paste0(out.dir, "/%s.pdf"), i), width = 16, height = 9)
+      dev.print(pdf, file = sprintf(paste0(out.dir, "/%s.pdf"), i), width = 16, height = 5)
     }
   }
 }
@@ -88,6 +88,9 @@ PCAll <- function(srt, out.path) {
 diff.heatmap <- function(srt, mark, n = 20, p.cutoff = 1e-5) {
   mark <- mark[mark$p_val_adj < p.cutoff, ]
   mark %>% group_by(cluster) %>% top_n(n, avg_logFC) -> topn
+  
+  
+  
   # setting slim.col.label to TRUE will print just the cluster IDS instead of every cell name
   DoHeatmap(srt, genes.use = topn$gene,  
             slim.col.label = TRUE, remove.key = TRUE, draw.line = T)
@@ -285,6 +288,26 @@ RunMoreTSNE <- function(srt, n.iter = 1000, pcs.use = 1:50, verbose = T) {
 }
 ```
 
+## Stacke violin plots
+```{r}
+ViolinMarkers <- function(srt, markers, ncol = 1) {
+  df <- NULL
+  for(i in markers){
+    vals <- data.frame(expr = srt@data[i,])
+    vals$gene <- as.character(i)
+    vals$cluster <- srt@ident
+    
+    df <- rbind(df, vals)
+  }
+  
+  df$cluster <- factor(df$cluster)
+  print(head(df))
+  
+  ggplot(df, aes(x = cluster, y = expr)) +
+    geom_violin(aes(fill = cluster)) + facet_wrap(~gene, ncol = ncol, scales = "free")
+}
+```
+
 
 #################################################################################################
 # MONOCLE
@@ -296,7 +319,7 @@ RunMoreTSNE <- function(srt, n.iter = 1000, pcs.use = 1:50, verbose = T) {
 monocle.from.seurat <- function(srt){
   cerr("Building Monocle Object...")
   mon <- newCellDataSet(as.matrix(srt@raw.data), 
-                        phenoData = new("AnnotatedDataFrame", data = srt@data.info),
+                        phenoData = new("AnnotatedDataFrame", data = srt@meta.data),
                         lowerDetectionLimit=1,
                         expressionFamily = negbinomial.size()
   )
