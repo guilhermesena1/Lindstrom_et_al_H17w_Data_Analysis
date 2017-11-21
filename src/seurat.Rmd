@@ -1,0 +1,274 @@
+
+#################################################################################################
+# SEURAT
+#################################################################################################
+
+## Helper functions to plot and save many figures
+```{r}
+# Saves all feature plots
+FeatureAll <- function(srt, marker.genes, out.dir) {
+  for(i in marker.genes) {
+    if(i %in% rownames(srt@scale.data)){
+      print(FeaturePlot(srt, i, cols.use = c("darkblue", "red"), no.axes=T, no.legend = F))
+      dev.print(pdf, file = sprintf(paste0(out.dir, "/%s.pdf"), i), width = 16, height = 9)
+    }
+  }
+}
+
+FeatureTopDiff <- function(srt, mark, out.dir, n = 10) {
+  mark %>% group_by(cluster) %>% top_n(n, avg_logFC) -> topn
+  for(i in unique(topn$cluster)) {
+      genes <- topn[topn$cluster == i,]$gene
+      FeatureAll(srt, genes, sprintf(paste0(out.dir, "/cluster_%s"),i))
+  }
+}
+
+# Saves all violin plots
+ViolinAll <- function(srt, marker.genes, out.dir) {
+  for(i in marker.genes) {
+    if(i %in% rownames(srt@scale.data)){
+      print(VlnPlot(srt, i))
+      dev.print(pdf, file = sprintf(paste0(out.dir, "/%s.pdf"), i), width = 16, height = 5)
+    }
+  }
+}
+
+# Save all PCs
+PCAll <- function(srt, out.path) {
+  print(out.path)
+  for(i in 1:48) {
+    print(PCHeatmap(srt, pc.use = i, cells.use = 100, do.balanced = T, label.columns = F))
+    dev.print(pdf, file = sprintf(paste0(out.path, "/PC%s.pdf"), i), width = 9, height = 15)
+  }
+  
+  # Saves jackstraw as well
+  print(JackStrawPlot(srt, PCs = 1:50))
+  dev.print(pdf, file = paste0(out.path, "/JackStraw.pdf"), width = 9, height = 25)
+}
+```
+
+## Heatmap of top DE genes based on average difference
+```{r}
+diff.heatmap <- function(srt, mark, n = 20, p.cutoff = 1e-5) {
+  mark <- mark[mark$p_val_adj < p.cutoff, ]
+  mark %>% group_by(cluster) %>% top_n(n, avg_logFC) -> topn
+  
+  
+  
+  # setting slim.col.label to TRUE will print just the cluster IDS instead of every cell name
+  DoHeatmap(srt, genes.use = topn$gene,  
+            slim.col.label = TRUE, remove.key = TRUE, draw.line = T)
+}
+```
+
+
+## Semi-supervised clustering of cells
+```{r}
+FindClustersSemi <- function(srt, mtx, k.iter = 5:50) {
+    markers <- rownames(mtx)
+    nmark <- nrow(mtx)
+    ans <- NULL
+    minscore <- 100000000
+    which.min <- NULL
+    for(k in k.iter) {
+        # Find clusters
+        print(paste0("k = ",k))
+        tmp <- FindClusters(srt, reuse.SNN = F, pc.use = srt@pcs.to.keep, k.param = k, print.output = F)
+        nclust <- length(unique(tmp@ident))
+        print(paste0("Num clusters = ", nclust))
+        
+        # Finds DE genes
+        tmp <- FindAllMarkers(tmp, only.pos=T, thresh.use = .15)
+        
+        # Gets top 10 DE genes for each cluster
+        topdiff <- data.frame(tmp@cluster.markers %>% group_by(cluster) %>% top_n(100,avg_diff))
+
+        # Builds a 1-0 matrix saying if gene is marker for each cluster
+        mark.clust <- matrix(NA, nrow = nmark, ncol = nclust)
+        for(i in 1:nmark) {
+            for(j in 1:nclust) {
+                mark.clust[i,j] <- sum(markers[i] %in% topdiff[topdiff$cluster == j - 1,]$gene)
+            }
+        }
+        
+        rownames(mark.clust) <- markers
+        colnames(mark.clust) <- 1:nclust
+        print(mark.clust)
+        # Finds how many times each pair of genes is in the matrix
+        mark.dist <- matrix(NA, nrow = nmark, ncol = nmark)
+        rownames(mark.dist) <- colnames(mark.dist) <- markers
+        for(i in 1:nmark) {
+            for(j in 1:nmark) {
+                mark.dist[i,j] <- sum(mark.clust[i,] & mark.clust[j,])
+            }
+        }
+#        print(mark.dist)
+        score <- sum(abs(mtx[markers, markers] - mark.dist[markers, markers]))
+        print(paste0("score = ",score))
+        if(score < minscore) {
+            
+            print("--------NEW MIN!!!!--------")
+            minscore <- score
+            which.min <- k
+            ans <- tmp
+        }
+    }
+    
+    print(paste0("min score = ", minscore))
+    print(paste0("which k min = ", which.min))
+    ans
+}
+```
+
+## Plots a bunch of figures to a directory
+```{r}
+FigureBomb <- function(srt, diffexp, markers, out.dir, do.pcs = T, do.tsne = T, 
+                       do.markers = T, do.topclusts = T,
+                       do.top5 = T, do.top20 = T) {
+    # PCS
+    if(do.pcs) {
+        PCAll(srt, out.path = paste0(out.dir,"/Principal_Components"))
+    }
+    
+    # TSNE
+    if(do.tsne) {
+        print(TSNEPlot(srt, do.label=T))
+        dev.print(pdf, file = paste0(out.dir, "/TSNE.pdf"), width = 16, height = 9)
+    }
+    
+    # Top 20 diff
+    if(do.top20) {
+        diff.heatmap(srt, diffexp, n = 20, p.cutoff = 1e-2)
+        dev.print(pdf, file = paste0(out.dir, "/Top20_DiffExpr.pdf", width = 16, height = 70))
+    }
+    
+    # Top 5 diff
+    if(do.top5) {
+        diff.heatmap(srt, diffexp, n = 5, p.cutoff = 1e-2)
+        dev.print(pdf, file = paste0(out.dir, "/Top5_DiffExpr.pdf", width = 16, height = 30))
+    }
+    
+    # Feature plots of marker genes
+    if(do.markers){
+        FeatureAll(srt, markers, paste0(out.dir, "/Feature_Plots/markers"))
+    }
+    
+    # Features of top diff
+    if(do.topclusts) {
+        FeatureTopDiff(srt, diffexp, paste0(out.dir, "/Feature_Plots/clusters"), n = 10)
+    }
+    # Diff Expr table
+    write.table(diffexp, file = paste0(out.dir, "/DiffExpr.tsv"), quote=F,sep="\t")
+}
+```
+
+## Plot Feature from metadata
+```{r}
+TSNEPlotFeature <- function(srt, feats) {
+    plotlist <- list()
+    for(which in feats) {
+        df <- data.frame(x = srt@dr$tsne@cell.embeddings[,1], 
+                         y = srt@dr$tsne@cell.embeddings[,2], 
+                         feat = as.numeric(srt@meta.data[, which]))
+    
+        plotlist[[which]] <- ggplot(df, aes(x = x, y = y, color = feat)) + 
+            geom_point() + 
+            scale_colour_gradient(low = "lightgray", high = "red", na.value = "red") + 
+            ggtitle(which)
+    }
+    
+    multiplot(plotlist = plotlist, cols = floor(sqrt(length(plotlist))))
+}
+multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
+  library(grid)
+
+  # Make a list from the ... arguments and plotlist
+  plots <- c(list(...), plotlist)
+
+  numPlots = length(plots)
+
+  # If layout is NULL, then use 'cols' to determine layout
+  if (is.null(layout)) {
+    # Make the panel
+    # ncol: Number of columns of plots
+    # nrow: Number of rows needed, calculated from # of cols
+    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
+                    ncol = cols, nrow = ceiling(numPlots/cols))
+  }
+
+ if (numPlots==1) {
+    print(plots[[1]])
+
+  } else {
+    # Set up the page
+    grid.newpage()
+    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+
+    # Make each plot, in the correct location
+    for (i in 1:numPlots) {
+      # Get the i,j matrix positions of the regions that contain this subplot
+      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+
+      print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
+                                      layout.pos.col = matchidx$col))
+    }
+  }
+}
+```
+
+```{r}
+PlotUnique <- function(srt, diffexp, out.dir, do.violin = F) {
+    genes <- diffexp$gene
+    unique.genes <- genes[!(duplicated(genes) | duplicated(genes, fromLast=T))]
+    for(i in unique(diffexp$cluster)) {
+        genes.plot <- unique(diffexp$gene[diffexp$cluster == i])
+        genes.plot <- genes.plot[genes.plot %in% unique.genes]
+        genes.plot <- genes.plot[1:(min(50, length(genes.plot)))]
+        if(!do.violin) {
+            FeatureAll(srt, genes.plot, paste0(out.dir, "/cluster_",i))
+        } else {
+            ViolinAll(srt, genes.plot, paste0(out.dir, "/cluster_",i))
+        }
+    }
+}
+```
+
+
+## Adds iteration to tSNE
+```{r}
+RunMoreTSNE <- function(srt, n.iter = 1000, pcs.use = 1:50, verbose = T) {
+    res <- Rtsne(srt@dr$pca@cell.embeddings[, pcs.use], 
+                 max_iter = n.iter, 
+                 pca = F, 
+                 Y_init = srt@dr$tsne@cell.embeddings,
+                 verbose = verbose)$Y
+    
+    colnames(res) <- c("tSNE_1", "tSNE_2")
+    rownames(res) <- rownames(srt@dr$pca@cell.embeddings)
+    
+    srt@dr$tsne@cell.embeddings <- res
+    
+    srt
+}
+```
+
+## Stacke violin plots
+```{r}
+ViolinMarkers <- function(srt, markers, ncol = 1) {
+  df <- NULL
+  for(i in markers){
+    vals <- data.frame(expr = srt@data[i,])
+    vals$gene <- as.character(i)
+    vals$cluster <- srt@ident
+    
+    df <- rbind(df, vals)
+  }
+  
+  df$cluster <- factor(df$cluster)
+  print(head(df))
+  
+  ggplot(df, aes(x = cluster, y = expr)) +
+    geom_violin(aes(fill = cluster)) + facet_wrap(~gene, ncol = ncol, scales = "free")
+}
+```
+

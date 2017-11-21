@@ -7,8 +7,11 @@
 # Ant text files
 !*.txt
 
-# Even if they are in directories
-!*/info/
+# Except for the Info Directory
+!/info/
+
+# And the sources directory
+!/src/
 
 # And .gitignore itself
 !.gitignore
