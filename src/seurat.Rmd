@@ -139,13 +139,13 @@ FigureBomb <- function(srt, diffexp, markers, out.dir, do.pcs = T, do.tsne = T,
     # Top 20 diff
     if(do.top20) {
         diff.heatmap(srt, diffexp, n = 20, p.cutoff = 1e-2)
-        dev.print(pdf, file = paste0(out.dir, "/Top20_DiffExpr.pdf", width = 16, height = 70))
+        dev.print(pdf, file = paste0(out.dir, "/Top20_DiffExpr.pdf"), width = 16, height = 70)
     }
     
     # Top 5 diff
     if(do.top5) {
         diff.heatmap(srt, diffexp, n = 5, p.cutoff = 1e-2)
-        dev.print(pdf, file = paste0(out.dir, "/Top5_DiffExpr.pdf", width = 16, height = 30))
+        dev.print(pdf, file = paste0(out.dir, "/Top5_DiffExpr.pdf"), width = 16, height = 30)
     }
     
     # Feature plots of marker genes
@@ -269,6 +269,17 @@ ViolinMarkers <- function(srt, markers, ncol = 1) {
   
   ggplot(df, aes(x = cluster, y = expr)) +
     geom_violin(aes(fill = cluster)) + facet_wrap(~gene, ncol = ncol, scales = "free")
+}
+```
+
+```{r}
+AddMito <- function(srt) {
+  mito.genes <- grep(pattern = "^MT-", x = rownames(x = srt@data), value = TRUE)
+  percent.mito <- Matrix::colSums(srt@raw.data[mito.genes, ])/Matrix::colSums(srt@raw.data)
+
+# AddMetaData adds columns to object@meta.data, and is a great place to
+# stash QC stats
+  srt <- AddMetaData(object = srt, metadata = percent.mito, col.name = "percent.mito")
 }
 ```
 
