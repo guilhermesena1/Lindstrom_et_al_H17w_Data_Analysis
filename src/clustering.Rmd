@@ -1,0 +1,25 @@
+# Clustering analysis
+
+## Bhattacharyya distance
+```{r}
+bd <- function(res, cl1, cl2) {
+  sigma1 <- res$parameters$variance$sigma[,,cl1]
+  sigma2 <- res$parameters$variance$sigma[,,cl2]
+  sigma <- (sigma1 + sigma2)/2
+  mu1 <- res$parameters$mean[,cl1]
+  mu2 <- res$parameters$mean[,cl2]
+  
+  d <- as.numeric(det(sigma))
+  d1 <- as.numeric(det(sigma1))
+  d2 <- as.numeric(det(sigma2))
+  
+  t(mu1 - mu2) %*% solve(sigma)%*%(mu1 - mu2)/8 + log(d/sqrt(d1*d2))/2
+}
+
+```
+
+## 
+```{r}
+
+```
+
