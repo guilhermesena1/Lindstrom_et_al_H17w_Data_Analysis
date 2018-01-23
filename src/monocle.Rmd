@@ -118,5 +118,69 @@ PseudotimeFeaturePlot <- function(mon, srt, gene) {
 ```
 
 
+```{r}
+Plot3DCellTrajectory <- function(mon, srt, color_by = "ident", color.pal = NULL) {
+  dims <- t(reducedDimS(mon))
+  col <- NULL
+  
+  # Color by state
+  if(color_by == "State") {
+    col <- factor(pData(mon)$State)
+    
+  # Color by Seurat cluster
+  } else if(color_by == "ident") {
+    col <- factor(srt@ident)
+  
+  # Color by gene expression
+  } else if(color_by %in% rownames(srt@data)){
+    col <- srt@data[color_by,]
+  } else {
+    stop(paste0("Dont know how to parse color_by: ", color_by))
+  }
+  
+  # Makes data frame
+  df <- data.frame(DDR_1 = dims[,1], DDR_2 = dims[,2], DDR_3 = dims[,3], col = col)
+  
+  # Debug
+  print(df)
+  print(typeof(df$col))
+  if(is.null(color.pal)) {
+    p <- plot_ly(data = df, x = ~DDR_1, y = ~DDR_2, z = ~DDR_3, 
+          text = col, 
+          color = ~col,
+          marker = list(size = 2)
+          )
+  } else {
+     p <- plot_ly(data = df, x = ~DDR_1, y = ~DDR_2, z = ~DDR_3, 
+          text = col, 
+          marker = list(size = 2, color = colors[as.integer(col)])
+          )
+  }
+  p <- p %>% layout(title = color_by)
+}
+```
+
+```{r}
+Plot3DAll <- function(mon, srt, genes, out.dir) {
+  for(gene in genes) {
+    p <- Plot3DCellTrajectory(mon, srt, gene)
+    htmlwidgets::saveWidget(as_widget(p), paste0(out.dir, "/", gene, ".html"))
+  }
+}
+```
+
+
+```{r}
+Pseudotime3DTopDiff <- function(mon, srt, mark, out.dir, n) {
+  mark %>% group_by(cluster) %>% top_n(n, avg_logFC) -> topn
+  for(i in unique(topn$cluster)) {
+      genes <- topn[topn$cluster == i,]$gene
+      Plot3DAll(mon, srt, genes, paste0(out.dir, "/cluster_", i))
+  }
+}
+```
+
+
+
 
 
