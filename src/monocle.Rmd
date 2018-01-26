@@ -122,18 +122,18 @@ PseudotimeFeaturePlot <- function(mon, srt, gene) {
 Plot3DCellTrajectory <- function(mon, srt, color_by = "ident", color.pal = NULL) {
   dims <- t(reducedDimS(mon))
   col <- NULL
-  
+  cells <- rownames(pData(mon))
   # Color by state
   if(color_by == "State") {
     col <- factor(pData(mon)$State)
     
   # Color by Seurat cluster
   } else if(color_by == "ident") {
-    col <- factor(srt@ident)
+    col <- factor(srt@ident[cells])
   
   # Color by gene expression
   } else if(color_by %in% rownames(srt@data)){
-    col <- srt@data[color_by,]
+    col <- srt@data[color_by,cells]
   } else {
     stop(paste0("Dont know how to parse color_by: ", color_by))
   }
@@ -142,14 +142,18 @@ Plot3DCellTrajectory <- function(mon, srt, color_by = "ident", color.pal = NULL)
   df <- data.frame(DDR_1 = dims[,1], DDR_2 = dims[,2], DDR_3 = dims[,3], col = col)
   
   # Debug
-  print(df)
-  print(typeof(df$col))
+  #print(df)
+  #print(typeof(df$col))
+  
+  # If no color palette, use default plotly
   if(is.null(color.pal)) {
     p <- plot_ly(data = df, x = ~DDR_1, y = ~DDR_2, z = ~DDR_3, 
           text = col, 
           color = ~col,
           marker = list(size = 2)
           )
+    
+  # Else use color palette as inscrution
   } else {
      p <- plot_ly(data = df, x = ~DDR_1, y = ~DDR_2, z = ~DDR_3, 
           text = col, 
@@ -157,6 +161,7 @@ Plot3DCellTrajectory <- function(mon, srt, color_by = "ident", color.pal = NULL)
           )
   }
   p <- p %>% layout(title = color_by)
+  p
 }
 ```
 
