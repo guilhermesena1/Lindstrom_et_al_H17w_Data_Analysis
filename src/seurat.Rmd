@@ -64,7 +64,7 @@ diff.heatmap <- function(srt, mark, n = 20, p.cutoff = 1e-5) {
 
 ## Semi-supervised clustering of cells
 ```{r}
-FindClustersSemi <- function(srt, mtx, k.iter = 5:50) {
+FindClustersSemi <- function(srt, mtx, k.iter = 5:50, pc.use = 1:20) {
     markers <- rownames(mtx)
     nmark <- nrow(mtx)
     ans <- NULL
@@ -73,15 +73,15 @@ FindClustersSemi <- function(srt, mtx, k.iter = 5:50) {
     for(k in k.iter) {
         # Find clusters
         print(paste0("k = ",k))
-        tmp <- FindClusters(srt, reuse.SNN = F, pc.use = srt@pcs.to.keep, k.param = k, print.output = F)
+        tmp <- FindClusters(srt, reuse.SNN = F, dims.use = pc.use, k.param = k, print.output = F)
         nclust <- length(unique(tmp@ident))
         print(paste0("Num clusters = ", nclust))
         
         # Finds DE genes
-        tmp <- FindAllMarkers(tmp, only.pos=T, thresh.use = .15)
+        tmp <- FindAllMarkers(tmp, only.pos=T, logfc.threshold = .15)
         
         # Gets top 10 DE genes for each cluster
-        topdiff <- data.frame(tmp@cluster.markers %>% group_by(cluster) %>% top_n(100,avg_diff))
+        topdiff <- data.frame(tmp %>% group_by(cluster) %>% top_n(100,avg_logFC))
 
         # Builds a 1-0 matrix saying if gene is marker for each cluster
         mark.clust <- matrix(NA, nrow = nmark, ncol = nclust)
@@ -144,7 +144,8 @@ FigureBomb <- function(srt, diffexp, markers, out.dir, do.pcs = T, do.tsne = T,
     
     # Top 5 diff
     if(do.top5) {
-        diff.heatmap(srt, diffexp, n = 5, p.cutoff = 1e-2)
+      diff.heatmap(srt, diffexp, n = 5, p.cutoff = 1e-2)
+      
         dev.print(pdf, file = paste0(out.dir, "/Top5_DiffExpr.pdf"), width = 16, height = 30)
     }
     
