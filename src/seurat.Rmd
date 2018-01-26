@@ -64,24 +64,25 @@ diff.heatmap <- function(srt, mark, n = 20, p.cutoff = 1e-5) {
 
 ## Semi-supervised clustering of cells
 ```{r}
-FindClustersSemi <- function(srt, mtx, k.iter = 5:50) {
+FindClustersSemi <- function(srt, mtx, k.iter = 5:50, PCs = 1:5) {
     markers <- rownames(mtx)
     nmark <- nrow(mtx)
+    print(markers)
     ans <- NULL
     minscore <- 100000000
     which.min <- NULL
     for(k in k.iter) {
         # Find clusters
         print(paste0("k = ",k))
-        tmp <- FindClusters(srt, reuse.SNN = F, pc.use = srt@pcs.to.keep, k.param = k, print.output = F)
+        tmp <- FindClusters(srt, dims.use = PCs, k.param = k, print.output = F)
         nclust <- length(unique(tmp@ident))
         print(paste0("Num clusters = ", nclust))
         
         # Finds DE genes
-        tmp <- FindAllMarkers(tmp, only.pos=T, thresh.use = .15)
+        mark <- FindAllMarkers(tmp, only.pos=T, thresh.use = 1)
         
         # Gets top 10 DE genes for each cluster
-        topdiff <- data.frame(tmp@cluster.markers %>% group_by(cluster) %>% top_n(100,avg_diff))
+        topdiff <- data.frame(mark %>% group_by(cluster) %>% top_n(100,avg_logFC))
 
         # Builds a 1-0 matrix saying if gene is marker for each cluster
         mark.clust <- matrix(NA, nrow = nmark, ncol = nclust)
@@ -102,7 +103,8 @@ FindClustersSemi <- function(srt, mtx, k.iter = 5:50) {
                 mark.dist[i,j] <- sum(mark.clust[i,] & mark.clust[j,])
             }
         }
-#        print(mark.dist)
+        
+        print(mtx)
         score <- sum(abs(mtx[markers, markers] - mark.dist[markers, markers]))
         print(paste0("score = ",score))
         if(score < minscore) {
@@ -269,6 +271,28 @@ ViolinMarkers <- function(srt, markers, ncol = 1) {
   
   ggplot(df, aes(x = cluster, y = expr)) +
     geom_violin(aes(fill = cluster)) + facet_wrap(~gene, ncol = ncol, scales = "free")
+}
+```
+
+## Force directed layout plotting
+```{r}
+PlotFDL <- function(srt, colors) {
+  cors <- cor(as.matrix(srt@data[srt@var.genes,]))
+  cors[cors == 1] <- 0
+  thresh <- min(apply(cors, 2, max))
+  cors <- cors >= thresh
+  
+  cl <- srt@ident
+  names(cl) <- rownames(srt@meta.data)
+  
+  gg <- graph_from_adjacency_matrix(cors, mode="undirected")
+  gg <- simplify(gg)
+  gg <- delete.vertices(gg, which(degree(gg) == 0))
+  V(gg)$color <- "#2a5e8c"
+  
+  print("Plotting...")
+  plot(gg, vertex.size = 2, vertex.label=NA)
+  legend('topleft',legend=paste0("Cluster ", 1:length(unique(cl))), col=1:length(unique(cl)), pt.bg = 1:length(unique(cl)), pt.cex = 1, pch = 19)
 }
 ```
 
