@@ -64,7 +64,7 @@ diff.heatmap <- function(srt, mark, n = 20, p.cutoff = 1e-5) {
 
 ## Semi-supervised clustering of cells
 ```{r}
-FindClustersSemi <- function(srt, mtx, k.iter = 5:50, PCs = 1:5) {
+FindClustersSemi <- function(srt, mtx, k.iter = 5:50, pc.use = 1:20) {
     markers <- rownames(mtx)
     nmark <- nrow(mtx)
     print(markers)
@@ -74,7 +74,7 @@ FindClustersSemi <- function(srt, mtx, k.iter = 5:50, PCs = 1:5) {
     for(k in k.iter) {
         # Find clusters
         print(paste0("k = ",k))
-        tmp <- FindClusters(srt, dims.use = PCs, k.param = k, print.output = F)
+        tmp <- FindClusters(srt, reuse.SNN = F, dims.use = pc.use, k.param = k, print.output = F)
         nclust <- length(unique(tmp@ident))
         print(paste0("Num clusters = ", nclust))
         
@@ -82,7 +82,7 @@ FindClustersSemi <- function(srt, mtx, k.iter = 5:50, PCs = 1:5) {
         mark <- FindAllMarkers(tmp, only.pos=T, thresh.use = 1)
         
         # Gets top 10 DE genes for each cluster
-        topdiff <- data.frame(mark %>% group_by(cluster) %>% top_n(100,avg_logFC))
+        topdiff <- data.frame(tmp %>% group_by(cluster) %>% top_n(100,avg_logFC))
 
         # Builds a 1-0 matrix saying if gene is marker for each cluster
         mark.clust <- matrix(NA, nrow = nmark, ncol = nclust)
@@ -141,13 +141,14 @@ FigureBomb <- function(srt, diffexp, markers, out.dir, do.pcs = T, do.tsne = T,
     # Top 20 diff
     if(do.top20) {
         diff.heatmap(srt, diffexp, n = 20, p.cutoff = 1e-2)
-        dev.print(pdf, file = paste0(out.dir, "/Top20_DiffExpr.pdf", width = 16, height = 70))
+        dev.print(pdf, file = paste0(out.dir, "/Top20_DiffExpr.pdf"), width = 16, height = 70)
     }
     
     # Top 5 diff
     if(do.top5) {
-        diff.heatmap(srt, diffexp, n = 5, p.cutoff = 1e-2)
-        dev.print(pdf, file = paste0(out.dir, "/Top5_DiffExpr.pdf", width = 16, height = 30))
+      diff.heatmap(srt, diffexp, n = 5, p.cutoff = 1e-2)
+      
+        dev.print(pdf, file = paste0(out.dir, "/Top5_DiffExpr.pdf"), width = 16, height = 30)
     }
     
     # Feature plots of marker genes
@@ -293,6 +294,15 @@ PlotFDL <- function(srt, colors) {
   print("Plotting...")
   plot(gg, vertex.size = 2, vertex.label=NA)
   legend('topleft',legend=paste0("Cluster ", 1:length(unique(cl))), col=1:length(unique(cl)), pt.bg = 1:length(unique(cl)), pt.cex = 1, pch = 19)
+```
+
+## Adds mitochontrial % to metadata
+```{r}
+AddMito <- function(srt) {
+  mito.genes <- grep(pattern = "^MT-", x = rownames(x = srt@data), value = TRUE)
+  percent.mito <- Matrix::colSums(srt@raw.data[mito.genes, ])/Matrix::colSums(srt@raw.data)
+
+  srt <- AddMetaData(object = srt, metadata = percent.mito, col.name = "percent.mito")
 }
 ```
 
