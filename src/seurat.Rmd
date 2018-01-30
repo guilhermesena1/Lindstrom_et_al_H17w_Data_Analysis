@@ -219,6 +219,7 @@ multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
 }
 ```
 
+## Plots only markers that are unique to each cluster
 ```{r}
 PlotUnique <- function(srt, diffexp, out.dir, do.violin = F) {
     genes <- diffexp$gene
@@ -294,6 +295,7 @@ PlotFDL <- function(srt, colors) {
   print("Plotting...")
   plot(gg, vertex.size = 2, vertex.label=NA)
   legend('topleft',legend=paste0("Cluster ", 1:length(unique(cl))), col=1:length(unique(cl)), pt.bg = 1:length(unique(cl)), pt.cex = 1, pch = 19)
+}
 ```
 
 ## Adds mitochontrial % to metadata
@@ -305,4 +307,60 @@ AddMito <- function(srt) {
   srt <- AddMetaData(object = srt, metadata = percent.mito, col.name = "percent.mito")
 }
 ```
+
+## Oh God...
+```{r}
+ProjectSeurat <- function(sa, sb, pref.a = "Hu", pref.b = "Org") {
+  # Subsets only genes present in both
+  write("Subsetting genes...", stderr())
+  genes.both <- intersect(rownames(sa@data), rownames(sb@data))
+  sa@data <- sa@data[genes.both,]
+  sb@data <- sb@data[genes.both,]
+  sa@raw.data <- sa@data[genes.both,]
+  sb@raw.data <- sb@data[genes.both,]
+  
+  # Prepends prefix to data, raw.data, meta.data and cell.embeddings
+  write("Prepending names to stuff...", stderr())
+  colnames(sa@data) <- paste0(pref.a, "_", colnames(sa@data))
+  colnames(sb@data) <- paste0(pref.b, "_", colnames(sb@data))
+  colnames(sa@raw.data) <- paste0(pref.a, "_", colnames(sa@raw.data))
+  colnames(sb@raw.data) <- paste0(pref.b, "_", colnames(sb@raw.data))
+  rownames(sa@meta.data) <- paste0(pref.a, "_", rownames(sa@meta.data))
+  rownames(sb@meta.data) <- paste0(pref.b, "_", rownames(sb@meta.data))
+  rownames(sa@dr$pca@cell.embeddings) <- paste0(pref.a, "_", rownames(sa@dr$pca@cell.embeddings))
+  rownames(sb@dr$pca@cell.embeddings) <- paste0(pref.b, "_", rownames(sb@dr$pca@cell.embeddings))
+  
+  # Creates merged origin list 
+  merged.origin <- c(rep(pref.a, nrow(sa@meta.data)), rep(pref.b, nrow(sb@meta.data)))
+  names(merged.origin) <- c(rownames(sa@meta.data), rownames(sb@meta.data))
+  
+  # PCA projection
+  write("Projecting Seurat B onto Seurat A", stderr())
+  genes.pc <- intersect(genes.both, rownames(sa@dr$pca@gene.loadings))
+  proj.mat <- sa@dr$pca@gene.loadings[genes.pc,]
+  
+  # Projection of Seurat B onto Seurat A PC Space
+  sb.proj <- as.matrix(t(proj.mat) %*% sb@data[genes.pc, ])
+  
+  write("Adding all Seurat  B data onto Seurat A", stderr())
+  sa@dr$pca@cell.embeddings <- rbind(sa@dr$pca@cell.embeddings, t(sb.proj))
+  sa@data <- cbind(sa@data, sb@data)
+  sa@raw.data <- cbind(sa@raw.data, sb@raw.data)
+
+  write("Adding relevant metadata of Seurat B onto Seurat A", stderr())
+  meta.both <- intersect(colnames(sa@meta.data), colnames(sb@meta.data))
+  sa@meta.data <- rbind(sa@meta.data[, meta.both], sb@meta.data[, meta.both])
+  
+  write("Adding Merged Origin Metadata", stderr())
+  sa <- AddMetaData(sa, merged.origin, "merged.origin")
+  
+  write("Overriding idents...", stderr())
+  sa@ident <- factor(c(paste0(pref.a,"_", sa@ident), paste0(pref.b, "_", sb@ident)))
+  names(sa@idnet) <- rownames(sa@meta.data)
+  
+  sa
+
+}
+```
+
 
