@@ -5,8 +5,8 @@
 ## Transpose seurat data into WGCNA object
 ```{r}
 # Puts scaled data in WGCNA format
-GetDatExpr <- function(srt) {
-  genes.use <- unique(srt@cluster.markers$gene)
+GetDatExpr <- function(srt, markers) {
+  genes.use <- unique(markers$gene)
   t(srt@scale.data[genes.use,])
 }
 ```
