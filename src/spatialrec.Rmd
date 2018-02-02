@@ -4,6 +4,13 @@
 # SPATIAL RECONSTRUCTION
 #################################################################################################
 
+## Image specific libraries
+```{r}
+library(oro.nifti) # to read nii files
+library(preprocessCore) # For quantile normalization
+```
+
+
 ## Plots histogram with density
 ```{r}
 hist.density <- function(srt, gene) {
@@ -242,5 +249,82 @@ DoSpatialReconstruction <- function(srt, levels,
     }
     
     return(sum(colSums(cells.select)>0))
+}
+```
+
+# Helper functions to handle manipulating nifti data
+
+## Reads nifti stacks into list
+```{r}
+ReadStacks <- function(inp.dir) {
+  ans <- list()
+  for(f in list.files(inp.dir)) {
+    ans[[f]] <- readNIfTI(paste0(inp.dir, "/", f))@.Data
+  }
+  
+  ans
+}
+```
+
+
+## Makes a table off of a list of 3D matrices
+```{r}
+MakeTableFromImages <- function(imgs) {
+  if(length(imgs) == 0) {
+    stop("Image list empty")
+  }
+  
+  dims <- dim(imgs[[names(imgs)[1]]])
+  ans <- matrix(NA, nrow = prod(dims), ncol = length(imgs))
+  colnames(ans) <- names(imgs)
+  rn <- c()
+  cnt <- 0
+  z <- 1
+#  for(z in 1:dims[3]){
+    for(y in 1:dims[2]) {
+      for(x in 1:dims[1]) {
+        for(gene in names(imgs)) {
+          ans[cnt, gene] <- imgs[[gene]][x,y]
+        }
+        rn <- c(rn, paste0("x_",x,"_y_",y,"_z_",z))
+        cnt <- cnt+1
+      }
+    }
+#  }
+  rownames(ans) <- rn
+  
+  ans
+}
+```
+
+## Reconstructs the image from a vector with xyz coords as rownames
+```{r}
+MakeImageFromVector <- function(vec) {
+  dims <- as.integer(strsplit(names(tail(vec,1)), "_")[[1]][c(2,4,6)])
+  ans <- matrix(NA, nrow = dims[1], ncol = dims[2])
+
+  for(i in 1:dims[1]) {
+    for(j in 1:dims[2]) {
+      ans[i,j] <- vec[paste0("x_", i, "_y_", j, "_z_1")]
+    }
+  }
+  
+  ans
+}
+```
+
+# Quantile Normalization
+
+## My quantile normalization implementaiton
+```{r}
+quant.norm <- function(df) {
+  df.ranks <- apply(ttt, 2, function(x) { rank(x, ties.method = "min")})
+  quantiles <- rowMeans(apply(df, 2, sort))
+  
+  ans <- matrix(quantiles[df.ranks], nrow = nrow(df))
+  rownames(ans) <- rownames(df)
+  colnames(ans) <- colnames(df)
+  
+  ans
 }
 ```
