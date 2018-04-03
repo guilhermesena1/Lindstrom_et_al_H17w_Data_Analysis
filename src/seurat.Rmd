@@ -36,7 +36,7 @@ ViolinAll <- function(srt, marker.genes, out.dir) {
 # Save all PCs
 PCAll <- function(srt, out.path) {
   print(out.path)
-  for(i in 1:48) {
+  for(i in 1:40) {
     print(PCHeatmap(srt, pc.use = i, cells.use = 100, do.balanced = T, label.columns = F))
     dev.print(pdf, file = sprintf(paste0(out.path, "/PC%s.pdf"), i), width = 9, height = 15)
   }
@@ -82,7 +82,7 @@ FindClustersSemi <- function(srt, mtx, k.iter = 5:50, pc.use = 1:20) {
         mark <- FindAllMarkers(tmp, only.pos=T, thresh.use = 1)
         
         # Gets top 10 DE genes for each cluster
-        topdiff <- data.frame(tmp %>% group_by(cluster) %>% top_n(100,avg_logFC))
+        topdiff <- data.frame(mark %>% group_by(cluster) %>% top_n(100,avg_logFC))
 
         # Builds a 1-0 matrix saying if gene is marker for each cluster
         mark.clust <- matrix(NA, nrow = nmark, ncol = nclust)
@@ -105,7 +105,7 @@ FindClustersSemi <- function(srt, mtx, k.iter = 5:50, pc.use = 1:20) {
         }
         
         print(mtx)
-        score <- sum(abs(mtx[markers, markers] - mark.dist[markers, markers]))
+        score <- sum((mtx[markers, markers] - mark.dist[markers, markers])^2)
         print(paste0("score = ",score))
         if(score < minscore) {
             
@@ -140,13 +140,13 @@ FigureBomb <- function(srt, diffexp, markers, out.dir, do.pcs = T, do.tsne = T,
     
     # Top 20 diff
     if(do.top20) {
-        diff.heatmap(srt, diffexp, n = 20, p.cutoff = 1e-2)
+        print(diff.heatmap(srt, diffexp, n = 20, p.cutoff = 1e-2))
         dev.print(pdf, file = paste0(out.dir, "/Top20_DiffExpr.pdf"), width = 16, height = 70)
     }
     
     # Top 5 diff
     if(do.top5) {
-      diff.heatmap(srt, diffexp, n = 5, p.cutoff = 1e-2)
+      print(diff.heatmap(srt, diffexp, n = 5, p.cutoff = 1e-2))
       
         dev.print(pdf, file = paste0(out.dir, "/Top5_DiffExpr.pdf"), width = 16, height = 30)
     }
@@ -175,7 +175,7 @@ TSNEPlotFeature <- function(srt, feats) {
                          feat = as.numeric(srt@meta.data[, which]))
     
         plotlist[[which]] <- ggplot(df, aes(x = x, y = y, color = feat)) + 
-            geom_point() + 
+            geom_point(size = 1) + 
             scale_colour_gradient(low = "lightgray", high = "red", na.value = "red") + 
             ggtitle(which)
     }
@@ -363,4 +363,43 @@ ProjectSeurat <- function(sa, sb, pref.a = "Hu", pref.b = "Org") {
 }
 ```
 
+```{r}
+avgdist <- function(srt, PCs = 1:19){
+  idents <- unique(srt@ident)
+  ans <- matrix(NA, nrow = length(idents), ncol = length(idents))
+  for(i in idents) {
+    for(j in idents) {
+      mmat <- matrix(NA, nrow=  sum(srt@ident ==i), ncol = sum(srt@ident == j))
+      va <- srt@dr$pca@cell.embeddings[srt@ident == i, PCs]
+      vb <- srt@dr$pca@cell.embeddings[srt@ident == j, PCs]
+      for(k in 1:nrow(va)) {
+        for(l in 1:nrow(vb)) {
+          mmat[k,l] <- sum((va[k,] - vb[l,])^2)
+        }
+      }
+      print(mmat)
+      print(dim(mmat))
+      ans[as.integer(i),as.integer(j)] <- mean(mmat)
+    }
+  }
+  rownames(ans) <- colnames(ans) <- paste0("H17w_", idents)
+  ans
+}
+
+centroiddist <- function(srt, PCs = 1:19){
+  idents <- unique(srt@ident)
+  ans <- NULL
+  for(i in idents) {
+    ans <- rbind(ans, colMeans(srt@dr$pca@cell.embeddings[srt@ident == i,PCs]))
+  }
+  rownames(ans) <- idents
+  as.matrix(dist(ans))
+}
+
+```
+
+
+```{r}
+
+```
 

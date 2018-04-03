@@ -43,7 +43,7 @@ getSft <- function(datExpr, plot=F) {
 ```{r}
 # Finds modules from raw expression
 Modules <- function(datExpr, p) {
-  blockwiseModules(datExpr, power = p, TOMType="unsigned", 
+  blockwiseModules(datExpr, power = p, TOMType="signed", 
                    minModuleSize = 10, deepSplit = 3, pamRespectsDendro = F,  
                    numericLabels = F, minKMEtoStay = 0, saveTOMs = F, verbose = 5)
 }
@@ -137,18 +137,16 @@ PlotScores <- function(scores, net) {
 ## ME boxplot
 ```{r}
 BoxMEByCluster <- function(srt, datExpr, net, which) {
-  df <- data.frame(net$MEs[,paste0("ME",which)])
+  df <- data.frame(net$MEs[,which])
   rownames(df) <- rownames(datExpr)
-  colors <- gg_color_hue(length(unique(srt@ident)))
 
-  df$cluster <- factor(srt@data.info[rownames(df),]$tree.ident)
-  df$color <- colors[df$cluster]
+  df$cluster <- factor(srt@meta.data[rownames(df),]$tree.ident)
   
   print(head(df))
   
-  colnames(df) <- c("module", "cluster", "color")
+  colnames(df) <- c("module", "cluster")
   
-  ggplot(df, aes(cluster, module)) + geom_boxplot(fill = colors)
+  ggplot(df, aes(cluster, module)) + geom_boxplot(fill = cluster)
 }
 ```
 
@@ -180,3 +178,17 @@ ModuleDF <- function(datExpr, net, p.cutoff = 1e-3) {
   ans
 }
 ```
+
+## Adds MEs to Seurat metadata
+```{r}
+AddMEsToMetaData <- function(srt, net) {
+  modules <- colnames(net$MEs)
+  for(m in modules) {
+    eigengenes <- net$MEs[, m]
+    names(eigengenes) <- rownames(srt@meta.data)
+    srt <- AddMetaData(srt, eigengenes, m)
+  }
+  srt
+}
+```
+

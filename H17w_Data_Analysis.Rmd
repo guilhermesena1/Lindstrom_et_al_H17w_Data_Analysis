@@ -1,0 +1,169 @@
+---
+title: "H17w (GSE112570) Data Analysis"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+This notebook generates the figures for paper XXXX
+
+```{r,message=F,warning=F}
+set.seed(408)
+library(Seurat)
+library(dplyr)
+library(monocle)
+library(WGCNA)
+library(igraph)
+library(mclust)
+
+## Loading R objects for fast knitting
+load("_robjs/H17w/seurat-human17w-nephro.Robj")
+load("_robjs/H17w/seurat-human17w.Robj")
+load("_robjs/H17w/mclust-human17w-nephro.Robj")
+load("_robjs/H17w/monocle-human17w.Robj")
+
+## Loads sources of helper functions
+source("R/seurat.R")
+source("R/monocle.R")
+source("R/wgcna.R")
+source("R/clustering.R")
+
+```
+
+# Analysis of the whole dataset
+
+## Load sparse matrices 
+```{r,eval=F}
+df.h17w.k1 <- Read10X("counts/10x/Human/H17w/K1")
+df.h17w.k2 <- Read10X("counts/10x/Human/H17w/K2")
+```
+
+## Append K1 and K2 to colnames so we know which kidney it comes from, then join datasets
+```{r,eval=F}
+colnames(df.h17w.k1) <- paste0("K1_", colnames(df.h17w.k1))
+colnames(df.h17w.k2) <- paste0("K2_", colnames(df.h17w.k2))
+df.h17w <- cbind(df.h17w.k1, df.h17w.k2)
+```
+
+## Creates Seurat Object from dataframe
+```{r,eval=F}
+srt.h17w <- CreateSeuratObject(raw.data = df.h17w, min.cells = 0, min.genes = 0, scale.factor = 1e4, do.center=F, project = "H17w", normalization.method = "LogNormalize")
+```
+
+## Calculates Saturation and mitochondrial pct
+```{r,eval=F}
+saturation <- 1 - apply(df.h17w == 1, 2, sum)/apply(df.h17w, 2, sum)
+pct.mito <- apply(df.h17w[grepl("^MT-", rownames(df.h17w)),], 2, sum)/apply(df.h17w, 2, sum)
+```
+
+
+## QC on different metrics: Number of genes, saturation, mitochondrial %
+```{r,eval=F}
+hist(saturation,breaks = 100)
+hist(pct.mito,breaks = 100)
+hist(srt.h17w@meta.data$nGene, breaks = 100)
+srt.h17w <- AddMetaData(srt.h17w, saturation, "saturation")
+srt.h17w <- AddMetaData(srt.h17w, pct.mito, "pct.mito")
+
+# Subsets data like in the methods
+head(srt.h17w@meta.data)
+srt.h17w <- SubsetData(srt.h17w, subset.name = "saturation", accept.low = .7)
+srt.h17w <- SubsetData(srt.h17w, subset.name = "nGene", accept.low = 1000)
+srt.h17w <- SubsetData(srt.h17w, subset.name = "pct.mito", accept.high = .05)
+```
+
+## Finds variable genes
+```{r,eval=F}
+srt.h17w <- ScaleData(srt.h17w, vars.to.regress = c("nGene", "nUMI", "saturation", "orig.ident"))
+srt.h17w <- FindVariableGenes(srt.h17w, x.low.cutoff = .05, x.high.cutoff = Inf, y.cutoff = .5, y.high.cutoff = Inf)
+length(srt.h17w@var.genes)
+srt.h17w <- RunPCA(srt.h17w, pc.genes = srt.h17w@var.genes, pcs.compute = 40)
+```
+
+## Runs JackStraw to find significant PCs
+```{r,eval=F}
+srt.h17w <- JackStraw(srt.h17w, num.pc = 40, do.print=T)
+JackStrawPlot(srt.h17w, PCs = 1:40, nCol = 6)
+```
+
+## Runs TSNE and Seurat clustering on the whole dataset
+```{r, message=F,eval=F}
+srt.h17w <- RunTSNE(srt.h17w, dims.use = 1:39, do.fast = T, verbose=T, perplexity = 2000)
+srt.h17w <- FindClusters(srt.h17w, dims.use = 1:39)
+srt.h17w <- BuildClusterTree(srt.h17w, do.reorder=T, reorder.numeric=T)
+```
+
+# Supplementary Fig 4A
+```{r}
+TSNEPlot(srt.h17w, group.by = "orig.ident", do.label=T)
+TSNEPlot(srt.h17w, do.label=T)
+```
+
+# Analysis of the nephro lineage
+
+## Creates a subset with just the nephro lineage
+```{r,eval=F}
+srt.h17w.nephro <- SubsetData(srt.h17w, ident.use = c(11,13,14,15,16))
+```
+
+## Finds variable genes in the subset of cells
+```{r,eval=F}
+srt.h17w.nephro <- FindVariableGenes(srt.h17w.nephro, x.low.cutoff = .05, x.high.cutoff = Inf, y.cutoff = 1, y.high.cutoff = Inf)
+```
+
+## Runs PCA
+```{r,eval=F}
+srt.h17w.nephro <- RunPCA(srt.h17w.nephro, pc.genes = srt.h17w.nephro@var.genes, pcs.compute = 50)
+```
+
+## Runs JackStraw
+```{r,eval=F}
+srt.h17w.nephro <- JackStraw(srt.h17w.nephro, num.pc = 50, do.print = T) # 19 PCs with p < .05
+```
+
+## Run TSNE with 19 PCs
+```{r,eval=F}
+srt.h17w.nephro <- RunTSNE(srt.h17w.nephro, dims.use = 1:19, do.fast = T)
+```
+
+## Clusters with GMM and assigns it to the seurat object
+```{r,eval=F}
+res.h17w <- Mclust(srt.h17w.nephro@dr$pca@cell.embeddings[, 1:19], G = 1:50)
+srt.h17w.nephro@ident <- factor(res.h17w$classification)
+```
+
+## Figure 2A
+```{r}
+TSNEPlot(srt.h17w.nephro, do.label=T)
+```
+
+## Differential Expression
+```{r,eval=F}
+markers.h17w.nephro <- FindAllMarkers(srt.h17w.nephro, logfc.threshold = 0, min.pct = 0, only.pos = T)
+```
+
+## Figure 2C
+```{r}
+bds <- bd.seurat(srt.h17w.nephro, PCs = 1:19)
+plot(hclust(as.dist(bds)), hang = -1)
+```
+
+## Supplementary Fig 3B
+```{r}
+plot.bd.mst(bds)
+```
+
+# Monocle Analysis
+## Turns Monocle into Seurat object
+```{r,eval=F}
+mon.17w.nephro <- monocle.from.seurat(srt.h17w.nephro)
+mon.17w.nephro.p2345 <- mon.sub(mon.17w.nephro, c(2,3,4,5))
+```
+
+## Figure 2D
+```{r}
+plot_cell_trajectory(mon.17w.nephro, color_by="ident")
+plot_cell_trajectory(mon.17w.nephro.p2345, color_by="ident")
+```
+

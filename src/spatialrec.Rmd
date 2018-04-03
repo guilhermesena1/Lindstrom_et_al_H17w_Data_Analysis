@@ -266,7 +266,6 @@ ReadStacks <- function(inp.dir) {
 }
 ```
 
-
 ## Makes a table off of a list of 3D matrices
 ```{r}
 MakeTableFromImages <- function(imgs) {
@@ -274,24 +273,35 @@ MakeTableFromImages <- function(imgs) {
     stop("Image list empty")
   }
   
+  print("Getting pixel values as table")
   dims <- dim(imgs[[names(imgs)[1]]])
-  ans <- matrix(NA, nrow = prod(dims), ncol = length(imgs))
-  colnames(ans) <- names(imgs)
-  rn <- c()
-  cnt <- 0
-  z <- 1
-#  for(z in 1:dims[3]){
-    for(y in 1:dims[2]) {
-      for(x in 1:dims[1]) {
-        for(gene in names(imgs)) {
-          ans[cnt, gene] <- imgs[[gene]][x,y]
-        }
-        rn <- c(rn, paste0("x_",x,"_y_",y,"_z_",z))
-        cnt <- cnt+1
+  ans <- foreach(v = imgs, .combine = cbind) %do% as.vector(v)
+  print(dim(ans))
+  
+  print("Doing rownames...")
+  rn <- apply(expand.grid(1:dims[1], 1:dims[2], 1:dims[3]), 1, paste, collapse = "_")
+  
+  print("Done!")
+  rownames(ans) <- rn
+  ans
+}
+```
+
+## Averages images with similar genes
+```{r}
+AverageImages <- function(imgs, which.genes) {
+  ans <- list()
+  for(g in unique(which.genes)) {
+    imgs.use <- names(imgs)[grepl(paste0("^",g), names(imgs))]
+    for(name in imgs.use) {
+      if(is.null(ans[[g]])) {
+        ans[[g]] <- imgs[[name]]@.Data
+      } else {
+        ans[[g]] <- ans[[g]] + imgs[[name]]@.Data
       }
     }
-#  }
-  rownames(ans) <- rn
+    ans[[g]] <- ans[[g]]/length(imgs.use)
+  }
   
   ans
 }
@@ -299,32 +309,26 @@ MakeTableFromImages <- function(imgs) {
 
 ## Reconstructs the image from a vector with xyz coords as rownames
 ```{r}
-MakeImageFromVector <- function(vec) {
-  dims <- as.integer(strsplit(names(tail(vec,1)), "_")[[1]][c(2,4,6)])
-  ans <- matrix(NA, nrow = dims[1], ncol = dims[2])
+MakeVideoFromVector <- function(vec) {
+  dims <- as.integer(strsplit(names(tail(vec,1)), "_")[[1]])
+  array(vec, dims)
+}
+```
 
-  for(i in 1:dims[1]) {
-    for(j in 1:dims[2]) {
-      ans[i,j] <- vec[paste0("x_", i, "_y_", j, "_z_1")]
-    }
+## Calculates the probability that each 
+```{r}
+CalcProbPixel <- function(tbl, cl) { 
+  ans <- matrix(NA, nrow = nrow(tbl), ncol = length(cl))
+  colnames(ans) <- names(cl)
+  rownames(ans) <- rownames(tbl)
+  for(j in 1:ncol(ans)) {
+    print(paste0("j = ", j))
+    ans[, j] <- apply(tbl, 1, dmvnorm, mean = cl[[j]]$muhat, sigma = cl[[j]]$sigmahat)
   }
   
-  ans
+  ans <- apply(ans, 1, function(x) {x / sum(x)})
+  
+  t(ans)
 }
 ```
 
-# Quantile Normalization
-
-## My quantile normalization implementaiton
-```{r}
-quant.norm <- function(df) {
-  df.ranks <- apply(ttt, 2, function(x) { rank(x, ties.method = "min")})
-  quantiles <- rowMeans(apply(df, 2, sort))
-  
-  ans <- matrix(quantiles[df.ranks], nrow = nrow(df))
-  rownames(ans) <- rownames(df)
-  colnames(ans) <- colnames(df)
-  
-  ans
-}
-```

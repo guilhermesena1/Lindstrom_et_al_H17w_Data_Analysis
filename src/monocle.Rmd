@@ -68,10 +68,10 @@ monocle.heatmap <- function(srt, mon, diff) {
   anno <- data.frame(Pseudotime = mon@phenoData@data[cells.by.pseudotime, "Pseudotime"])
   rownames(anno) <- cells.by.pseudotime
   
-  to.plot <- as.matrix(srt@data[genes.top, cells.by.pseudotime])
-  for(i in 1:nrow(to.plot)) {
-    to.plot[i,] <- scale(to.plot[i,])
-  }
+  #to.plot <- as.matrix(srt@data[genes.top, cells.by.pseudotime])
+  #for(i in 1:nrow(to.plot)) {
+  #  to.plot[i,] <- scale(to.plot[i,])
+  #}
   to.plot[to.plot > 5] <- 5
   to.plot[to.plot < -5] <- -5
   
@@ -79,7 +79,7 @@ monocle.heatmap <- function(srt, mon, diff) {
   pheatmap(to.plot, 
            cluster_cols = F, cluster_rows = T, 
            show_colnames = F, show_rownames = T, 
-           annotation = anno, color =  makeColorRampPalette(c("#990000", "#CCCCCC", "#2a5e8c"), .5, 100))
+           annotation = anno)
 }
 ```
 
@@ -157,7 +157,7 @@ Plot3DCellTrajectory <- function(mon, srt, color_by = "ident", color.pal = NULL)
   } else {
      p <- plot_ly(data = df, x = ~DDR_1, y = ~DDR_2, z = ~DDR_3, 
           text = col, 
-          marker = list(size = 2, color = colors[as.integer(col)])
+          marker = list(size = 2, color = color.pal[as.integer(col)])
           )
   }
   p <- p %>% layout(title = color_by)
