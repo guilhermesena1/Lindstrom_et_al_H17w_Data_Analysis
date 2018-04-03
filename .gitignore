@@ -12,6 +12,7 @@
 
 # And the sources directory
 !/src/
+!/R/
 
 # And .gitignore itself
 !.gitignore
