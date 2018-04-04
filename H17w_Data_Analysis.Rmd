@@ -35,13 +35,13 @@ source("R/clustering.R")
 # Analysis of the whole dataset
 
  Load sparse matrices 
-```{r,eval=F}
+```{r}
 df.h17w.k1 <- Read10X("counts/10x/Human/H17w/K1")
 df.h17w.k2 <- Read10X("counts/10x/Human/H17w/K2")
 ```
 
  Append K1 and K2 to colnames so we know which kidney it comes from, then join datasets
-```{r,eval=F}
+```{r}
 colnames(df.h17w.k1) <- paste0("K1_", colnames(df.h17w.k1))
 colnames(df.h17w.k2) <- paste0("K2_", colnames(df.h17w.k2))
 df.h17w <- cbind(df.h17w.k1, df.h17w.k2)
@@ -53,22 +53,23 @@ srt.h17w <- CreateSeuratObject(raw.data = df.h17w, min.cells = 0, min.genes = 0,
 ```
 
  Calculates Saturation and mitochondrial pct
-```{r,eval=F}
+```{r}
 saturation <- 1 - apply(df.h17w == 1, 2, sum)/apply(df.h17w, 2, sum)
 pct.mito <- apply(df.h17w[grepl("^MT-", rownames(df.h17w)),], 2, sum)/apply(df.h17w, 2, sum)
+nGene <- apply(df.h17w == 1, 2, sum)
 ```
 
-
  QC on different metrics: Number of genes, saturation, mitochondrial %
-```{r,eval=F}
+```{r}
 hist(saturation,breaks = 100)
 hist(pct.mito,breaks = 100)
-hist(srt.h17w@meta.data$nGene, breaks = 100)
-srt.h17w <- AddMetaData(srt.h17w, saturation, "saturation")
-srt.h17w <- AddMetaData(srt.h17w, pct.mito, "pct.mito")
+hist(nGene, breaks = 100)
+```
 
 # Subsets data like in the methods
-head(srt.h17w@meta.data)
+```{r,eval=F}
+srt.h17w <- AddMetaData(srt.h17w, saturation, "saturation")
+srt.h17w <- AddMetaData(srt.h17w, pct.mito, "pct.mito")
 srt.h17w <- SubsetData(srt.h17w, subset.name = "saturation", accept.low = .7)
 srt.h17w <- SubsetData(srt.h17w, subset.name = "nGene", accept.low = 1000)
 srt.h17w <- SubsetData(srt.h17w, subset.name = "pct.mito", accept.high = .05)
