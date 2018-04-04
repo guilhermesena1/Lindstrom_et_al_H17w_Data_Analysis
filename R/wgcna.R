@@ -1,5 +1,5 @@
 ## ------------------------------------------------------------------------
-# Puts scaled data in WGCNA format
+## Transpose seurat data into WGCNA object
 GetDatExpr <- function(srt, markers) {
   genes.use <- unique(markers$gene)
   t(srt@scale.data[genes.use,])
@@ -10,25 +10,6 @@ GetDatExpr <- function(srt, markers) {
 getSft <- function(datExpr, plot=F) {
   powers <- c(1:10, 2*6:10)
   sft = pickSoftThreshold(datExpr, powerVector = powers, verbose = 5)
-  
-  if(plot){
-    par(mfrow = c(1,2))
-    cex1 = 0.9;
-    
-    plot(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2],
-         xlab="Soft Threshold (power)",ylab="Scale Free Topology Model Fit,signed R^2",type="n",
-         main = paste("Scale independence"));
-    text(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2],
-         labels=powers,cex=cex1,col="red");
-    
-    abline(h=0.90,col="red")
-    
-    plot(sft$fitIndices[,1], sft$fitIndices[,5],
-         xlab="Soft Threshold (power)",ylab="Mean Connectivity", type="n",
-         main = paste("Mean connectivity"))
-    text(sft$fitIndices[,1], sft$fitIndices[,5], labels=powers, cex=cex1,col="red")
-  }
-  return(sft)
 }
 
 ## ------------------------------------------------------------------------
@@ -56,6 +37,7 @@ PlotModule <- function(srt, datExpr, net, which) {
 }
 
 ## ------------------------------------------------------------------------
+## Prints top genes (based on connectivity) for a given module
 GetGenesFromModule <- function(datExpr, power, net, which) {
   datExpr <- datExpr[,net$colors == which]
   adj <- adjacency(datExpr, power = power)
@@ -65,6 +47,7 @@ GetGenesFromModule <- function(datExpr, power, net, which) {
 }
 
 ## ------------------------------------------------------------------------
+## Draws module network using igraph
 PlotModuleNetwork <- function (datExpr, power, net, which, thresh = .01) {
   dat <- datExpr[, net$colors == which]
   IMConn <- softConnectivity(dat)
@@ -83,17 +66,20 @@ PlotModuleNetwork <- function (datExpr, power, net, which, thresh = .01) {
 }
 
 ## ------------------------------------------------------------------------
+## Calculates Module Score for all cells
 ModuleScore <- function(datExpr, power, net, mon) {
     ans <- net$MEs
     rownames(ans) <- rownames(datExpr)
     
     ans$Pseudotime <- mon@phenoData@data[rownames(ans),]$Pseudotime
+    ans <- ans[apply(ans, 1, function(x) {sum(is.na(x)) == 0}),]
     ans
 }
 
 ## ------------------------------------------------------------------------
+## Plots scores
 PlotScores <- function(scores, net) {
-  X11(width = 16, height = 9)
+  #X11(width = 16, height = 9)
   plot(NA, xlab = "Pseudotime", ylab="Module score", 
        xlim = c(0, max(scores$Pseudotime)), ylim = c(min(scores[, !(colnames(scores) %in% "Pseudotime")]), max(scores[,!(colnames(scores) %in% "Pseudotime")])))
   
@@ -101,8 +87,7 @@ PlotScores <- function(scores, net) {
   for(i in unique(net$colors)) {
     if(i != "grey"){
         if(sum(net$colors == i)>10) {
-          print(i)
-          lines(smooth.spline(scores$Pseudotime, scores[,paste0("ME",i)], spar = 0.7), col = i)
+          lines(smooth.spline(scores$Pseudotime, scores[,paste0("ME",i)], spar = 1), col = i)
           colors <- c(colors, i) 
         }
       }
@@ -112,20 +97,19 @@ PlotScores <- function(scores, net) {
 
 
 ## ------------------------------------------------------------------------
+## ME boxplot
 BoxMEByCluster <- function(srt, datExpr, net, which) {
   df <- data.frame(net$MEs[,which])
   rownames(df) <- rownames(datExpr)
 
-  df$cluster <- factor(srt@meta.data[rownames(df),]$tree.ident)
-  
-  print(head(df))
-  
+  df$cluster <- srt@ident[rownames(df)]
   colnames(df) <- c("module", "cluster")
-  
-  ggplot(df, aes(cluster, module)) + geom_boxplot(fill = cluster)
+
+  ggplot(df, aes(cluster, module)) + geom_boxplot(aes(fill = cluster))
 }
 
 ## ------------------------------------------------------------------------
+## Uses a 2 mixture model to find cells that are + and - for some module
 SelectMECells <- function(datExpr, net, which) {
   MEs <- net$MEs[, paste0("ME", which)]
   mm <- Mclust(MEs, G = 2)
@@ -140,17 +124,7 @@ SelectMECells <- function(datExpr, net, which) {
 }
 
 ## ------------------------------------------------------------------------
-ModuleDF <- function(datExpr, net, p.cutoff = 1e-3) {
-  ans <- NULL
-  for(i in unique(net$colors)) {
-    ans <- cbind(ans, SelectMECells(datExpr, net, i, p.cutoff))
-  }
-  
-  colnames(ans) <- unique(net$colors)
-  ans
-}
-
-## ------------------------------------------------------------------------
+## Adds Module Eigengene Calculation to Seurat metadata
 AddMEsToMetaData <- function(srt, net) {
   modules <- colnames(net$MEs)
   for(m in modules) {

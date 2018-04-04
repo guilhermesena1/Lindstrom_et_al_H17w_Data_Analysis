@@ -41,6 +41,7 @@ PCAll <- function(srt, out.path) {
 }
 
 ## ------------------------------------------------------------------------
+## Heatmap of top DE genes based on average difference
 diff.heatmap <- function(srt, mark, n = 20, p.cutoff = 1e-5) {
   mark <- mark[mark$p_val_adj < p.cutoff, ]
   mark %>% group_by(cluster) %>% top_n(n, avg_logFC) -> topn
@@ -53,64 +54,7 @@ diff.heatmap <- function(srt, mark, n = 20, p.cutoff = 1e-5) {
 }
 
 ## ------------------------------------------------------------------------
-FindClustersSemi <- function(srt, mtx, k.iter = 5:50, pc.use = 1:20) {
-    markers <- rownames(mtx)
-    nmark <- nrow(mtx)
-    print(markers)
-    ans <- NULL
-    minscore <- 100000000
-    which.min <- NULL
-    for(k in k.iter) {
-        # Find clusters
-        print(paste0("k = ",k))
-        tmp <- FindClusters(srt, reuse.SNN = F, dims.use = pc.use, k.param = k, print.output = F)
-        nclust <- length(unique(tmp@ident))
-        print(paste0("Num clusters = ", nclust))
-        
-        # Finds DE genes
-        mark <- FindAllMarkers(tmp, only.pos=T, thresh.use = 1)
-        
-        # Gets top 10 DE genes for each cluster
-        topdiff <- data.frame(mark %>% group_by(cluster) %>% top_n(100,avg_logFC))
-
-        # Builds a 1-0 matrix saying if gene is marker for each cluster
-        mark.clust <- matrix(NA, nrow = nmark, ncol = nclust)
-        for(i in 1:nmark) {
-            for(j in 1:nclust) {
-                mark.clust[i,j] <- sum(markers[i] %in% topdiff[topdiff$cluster == j - 1,]$gene)
-            }
-        }
-        
-        rownames(mark.clust) <- markers
-        colnames(mark.clust) <- 1:nclust
-        print(mark.clust)
-        # Finds how many times each pair of genes is in the matrix
-        mark.dist <- matrix(NA, nrow = nmark, ncol = nmark)
-        rownames(mark.dist) <- colnames(mark.dist) <- markers
-        for(i in 1:nmark) {
-            for(j in 1:nmark) {
-                mark.dist[i,j] <- sum(mark.clust[i,] & mark.clust[j,])
-            }
-        }
-        
-        print(mtx)
-        score <- sum((mtx[markers, markers] - mark.dist[markers, markers])^2)
-        print(paste0("score = ",score))
-        if(score < minscore) {
-            
-            print("--------NEW MIN!!!!--------")
-            minscore <- score
-            which.min <- k
-            ans <- tmp
-        }
-    }
-    
-    print(paste0("min score = ", minscore))
-    print(paste0("which k min = ", which.min))
-    ans
-}
-
-## ------------------------------------------------------------------------
+## Plots a bunch of figures to a directory
 FigureBomb <- function(srt, diffexp, markers, out.dir, do.pcs = T, do.tsne = T, 
                        do.markers = T, do.topclusts = T,
                        do.top5 = T, do.top20 = T) {
@@ -152,6 +96,7 @@ FigureBomb <- function(srt, diffexp, markers, out.dir, do.pcs = T, do.tsne = T,
 }
 
 ## ------------------------------------------------------------------------
+## Plot Feature from metadata
 TSNEPlotFeature <- function(srt, feats) {
     plotlist <- list()
     for(which in feats) {
@@ -204,6 +149,7 @@ multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
 }
 
 ## ------------------------------------------------------------------------
+## Plots only markers that are unique to each cluster
 PlotUnique <- function(srt, diffexp, out.dir, do.violin = F) {
     genes <- diffexp$gene
     unique.genes <- genes[!(duplicated(genes) | duplicated(genes, fromLast=T))]
@@ -220,6 +166,7 @@ PlotUnique <- function(srt, diffexp, out.dir, do.violin = F) {
 }
 
 ## ------------------------------------------------------------------------
+## Adds iteration to tSNE
 RunMoreTSNE <- function(srt, n.iter = 1000, pcs.use = 1:50, verbose = T) {
     res <- Rtsne(srt@dr$pca@cell.embeddings[, pcs.use], 
                  max_iter = n.iter, 
@@ -236,24 +183,7 @@ RunMoreTSNE <- function(srt, n.iter = 1000, pcs.use = 1:50, verbose = T) {
 }
 
 ## ------------------------------------------------------------------------
-ViolinMarkers <- function(srt, markers, ncol = 1) {
-  df <- NULL
-  for(i in markers){
-    vals <- data.frame(expr = srt@data[i,])
-    vals$gene <- as.character(i)
-    vals$cluster <- srt@ident
-    
-    df <- rbind(df, vals)
-  }
-  
-  df$cluster <- factor(df$cluster)
-  print(head(df))
-  
-  ggplot(df, aes(x = cluster, y = expr)) +
-    geom_violin(aes(fill = cluster)) + facet_wrap(~gene, ncol = ncol, scales = "free")
-}
-
-## ------------------------------------------------------------------------
+## Force directed layout plotting
 PlotFDL <- function(srt, colors) {
   cors <- cor(as.matrix(srt@data[srt@var.genes,]))
   cors[cors == 1] <- 0
@@ -274,89 +204,7 @@ PlotFDL <- function(srt, colors) {
 }
 
 ## ------------------------------------------------------------------------
-AddMito <- function(srt) {
-  mito.genes <- grep(pattern = "^MT-", x = rownames(x = srt@data), value = TRUE)
-  percent.mito <- Matrix::colSums(srt@raw.data[mito.genes, ])/Matrix::colSums(srt@raw.data)
-
-  srt <- AddMetaData(object = srt, metadata = percent.mito, col.name = "percent.mito")
-}
-
-## ------------------------------------------------------------------------
-ProjectSeurat <- function(sa, sb, pref.a = "Hu", pref.b = "Org") {
-  # Subsets only genes present in both
-  write("Subsetting genes...", stderr())
-  genes.both <- intersect(rownames(sa@data), rownames(sb@data))
-  sa@data <- sa@data[genes.both,]
-  sb@data <- sb@data[genes.both,]
-  sa@raw.data <- sa@data[genes.both,]
-  sb@raw.data <- sb@data[genes.both,]
-  
-  # Prepends prefix to data, raw.data, meta.data and cell.embeddings
-  write("Prepending names to stuff...", stderr())
-  colnames(sa@data) <- paste0(pref.a, "_", colnames(sa@data))
-  colnames(sb@data) <- paste0(pref.b, "_", colnames(sb@data))
-  colnames(sa@raw.data) <- paste0(pref.a, "_", colnames(sa@raw.data))
-  colnames(sb@raw.data) <- paste0(pref.b, "_", colnames(sb@raw.data))
-  rownames(sa@meta.data) <- paste0(pref.a, "_", rownames(sa@meta.data))
-  rownames(sb@meta.data) <- paste0(pref.b, "_", rownames(sb@meta.data))
-  rownames(sa@dr$pca@cell.embeddings) <- paste0(pref.a, "_", rownames(sa@dr$pca@cell.embeddings))
-  rownames(sb@dr$pca@cell.embeddings) <- paste0(pref.b, "_", rownames(sb@dr$pca@cell.embeddings))
-  
-  # Creates merged origin list 
-  merged.origin <- c(rep(pref.a, nrow(sa@meta.data)), rep(pref.b, nrow(sb@meta.data)))
-  names(merged.origin) <- c(rownames(sa@meta.data), rownames(sb@meta.data))
-  
-  # PCA projection
-  write("Projecting Seurat B onto Seurat A", stderr())
-  genes.pc <- intersect(genes.both, rownames(sa@dr$pca@gene.loadings))
-  proj.mat <- sa@dr$pca@gene.loadings[genes.pc,]
-  
-  # Projection of Seurat B onto Seurat A PC Space
-  sb.proj <- as.matrix(t(proj.mat) %*% sb@data[genes.pc, ])
-  
-  write("Adding all Seurat  B data onto Seurat A", stderr())
-  sa@dr$pca@cell.embeddings <- rbind(sa@dr$pca@cell.embeddings, t(sb.proj))
-  sa@data <- cbind(sa@data, sb@data)
-  sa@raw.data <- cbind(sa@raw.data, sb@raw.data)
-
-  write("Adding relevant metadata of Seurat B onto Seurat A", stderr())
-  meta.both <- intersect(colnames(sa@meta.data), colnames(sb@meta.data))
-  sa@meta.data <- rbind(sa@meta.data[, meta.both], sb@meta.data[, meta.both])
-  
-  write("Adding Merged Origin Metadata", stderr())
-  sa <- AddMetaData(sa, merged.origin, "merged.origin")
-  
-  write("Overriding idents...", stderr())
-  sa@ident <- factor(c(paste0(pref.a,"_", sa@ident), paste0(pref.b, "_", sb@ident)))
-  names(sa@idnet) <- rownames(sa@meta.data)
-  
-  sa
-
-}
-
-## ------------------------------------------------------------------------
-avgdist <- function(srt, PCs = 1:19){
-  idents <- unique(srt@ident)
-  ans <- matrix(NA, nrow = length(idents), ncol = length(idents))
-  for(i in idents) {
-    for(j in idents) {
-      mmat <- matrix(NA, nrow=  sum(srt@ident ==i), ncol = sum(srt@ident == j))
-      va <- srt@dr$pca@cell.embeddings[srt@ident == i, PCs]
-      vb <- srt@dr$pca@cell.embeddings[srt@ident == j, PCs]
-      for(k in 1:nrow(va)) {
-        for(l in 1:nrow(vb)) {
-          mmat[k,l] <- sum((va[k,] - vb[l,])^2)
-        }
-      }
-      print(mmat)
-      print(dim(mmat))
-      ans[as.integer(i),as.integer(j)] <- mean(mmat)
-    }
-  }
-  rownames(ans) <- colnames(ans) <- paste0("H17w_", idents)
-  ans
-}
-
+## Calculates distance between centroids of clusters in PC space
 centroiddist <- function(srt, PCs = 1:19){
   idents <- unique(srt@ident)
   ans <- NULL
@@ -366,8 +214,5 @@ centroiddist <- function(srt, PCs = 1:19){
   rownames(ans) <- idents
   as.matrix(dist(ans))
 }
-
-
-## ------------------------------------------------------------------------
 
 
