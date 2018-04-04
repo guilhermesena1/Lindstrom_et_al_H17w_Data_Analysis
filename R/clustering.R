@@ -1,4 +1,5 @@
 ## ------------------------------------------------------------------------
+## Bhattacharyya distance
 bd <- function(res, cl1, cl2) {
   sigma1 <- res$parameters$variance$sigma[,,cl1]
   sigma2 <- res$parameters$variance$sigma[,,cl2]
@@ -14,6 +15,7 @@ bd <- function(res, cl1, cl2) {
 }
 
 ## ------------------------------------------------------------------------
+## KL Divergence between two GMM clusters
 kl <- function(res, cl1, cl2) {
   sigma1 <- res$parameters$variance$sigma[,,cl1]
   sigma2 <- res$parameters$variance$sigma[,,cl2]
@@ -25,6 +27,7 @@ kl <- function(res, cl1, cl2) {
 }
 
 ## ------------------------------------------------------------------------
+## Hellinger Distance Between two GMM Clusters
 hellinger <- function(res, cl1, cl2) {
   sigma1 <- res$parameters$variance$sigma[,,cl1]
   sigma2 <- res$parameters$variance$sigma[,,cl2]
@@ -36,6 +39,7 @@ hellinger <- function(res, cl1, cl2) {
 
 
 ## ------------------------------------------------------------------------
+## BD of two Mclust MLE objects
 bd.mle <- function(res1, res2) {
   sigma1 <- res1$parameters$variance$Sigma
   sigma2 <- res2$parameters$variance$Sigma
@@ -51,6 +55,7 @@ bd.mle <- function(res1, res2) {
 }
 
 ## ------------------------------------------------------------------------
+## Calculates Bhattacharyya Distance of two Seurat clusters by estimating Gaussian MLE
 bd.seurat <- function(srt, PCs = 1:30) {
   idents <- unique(srt@ident)
   mcl <- list()
@@ -70,6 +75,7 @@ bd.seurat <- function(srt, PCs = 1:30) {
 }
 
 ## ------------------------------------------------------------------------
+## Functions for pairwise distances
 pairwise.bd <- function(res, prefix = "Whole_"){
   cls <- unique(res$classification)
   ans <- matrix(NA, nrow = length(cls), ncol = length(cls))
@@ -113,6 +119,7 @@ pairwise.hellinger <- function(res, prefix = "Whole_"){
 }
 
 
+## ------------------------------------------------------------------------
 ## Plots hclust for pairwise bd
 plot.pairwise.bd <- function(bds) {
   plot(hclust(as.dist(bds)), hang = -1, xlab = "Cluster", ylab = "Bhattacharyya distance", main = "GMM Cluster Hierarchy")
