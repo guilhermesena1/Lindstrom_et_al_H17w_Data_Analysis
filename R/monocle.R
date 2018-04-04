@@ -1,5 +1,5 @@
 ## ------------------------------------------------------------------------
-# Creates Monocle object from Seurat data
+## Converts Seurat Object into Monocle Object and Run Monocle Pipeline
 monocle.from.seurat <- function(srt){
   cerr("Building Monocle Object...")
   
@@ -22,10 +22,12 @@ monocle.from.seurat <- function(srt){
 }
 
 ## ------------------------------------------------------------------------
+## Filters differential gene test by n cells cutoff and q val cutoff
 do.dgt <- function(srt, mon) {
   genes.use <- srt@var.genes[srt@var.genes %in% rownames(mon@assayData$exprs)]
   differentialGeneTest(mon[genes.use,], relative_expr = F)
 }
+
 dgt.filter <- function(dgt, qval.cutoff = 1, ncells.cutoff = 0) {
   dgt <- dgt[dgt$qval < qval.cutoff, ]
   dgt <- dgt[dgt$num_cells_expressed > ncells.cutoff, ]
@@ -35,6 +37,7 @@ dgt.filter <- function(dgt, qval.cutoff = 1, ncells.cutoff = 0) {
 }
 
 ## ------------------------------------------------------------------------
+## Subpath analysis: Selects only a subset of states from a monocle object
 mon.sub <- function(mon, states) {
     cerr("Subsetting...")
     cells.keep <- rownames(mon@phenoData@data)[mon@phenoData@data$State %in% states]
@@ -48,6 +51,7 @@ mon.sub <- function(mon, states) {
 }
 
 ## ------------------------------------------------------------------------
+## Plots expression heatmap for top genes using pheatmap
 monocle.heatmap <- function(srt, mon, diff) {
   # gets cells in order
   cells.by.pseudotime <- colnames(srt@data)[colnames(srt@data) %in% colnames(mon@assayData$exprs)]
@@ -71,6 +75,7 @@ monocle.heatmap <- function(srt, mon, diff) {
 }
 
 ## ------------------------------------------------------------------------
+## Plots and saves pseudotime heatmaps
 PseudotimeFeatureAll <- function(mon, srt, genes, out.dir) {
   for(i in genes) {
     print(PseudotimeFeaturePlot(mon, srt, i))
@@ -99,6 +104,7 @@ PseudotimeFeaturePlot <- function(mon, srt, gene) {
 }
 
 ## ------------------------------------------------------------------------
+## Plots monocle tree when reduced to 3D
 Plot3DCellTrajectory <- function(mon, srt, color_by = "ident", color.pal = NULL) {
   dims <- t(reducedDimS(mon))
   col <- NULL
@@ -121,10 +127,6 @@ Plot3DCellTrajectory <- function(mon, srt, color_by = "ident", color.pal = NULL)
   # Makes data frame
   df <- data.frame(DDR_1 = dims[,1], DDR_2 = dims[,2], DDR_3 = dims[,3], col = col)
   
-  # Debug
-  #print(df)
-  #print(typeof(df$col))
-  
   # If no color palette, use default plotly
   if(is.null(color.pal)) {
     p <- plot_ly(data = df, x = ~DDR_1, y = ~DDR_2, z = ~DDR_3, 
@@ -145,6 +147,7 @@ Plot3DCellTrajectory <- function(mon, srt, color_by = "ident", color.pal = NULL)
 }
 
 ## ------------------------------------------------------------------------
+## Plots a list of genes in 3D
 Plot3DAll <- function(mon, srt, genes, out.dir) {
   for(gene in genes) {
     p <- Plot3DCellTrajectory(mon, srt, gene)
@@ -153,6 +156,7 @@ Plot3DAll <- function(mon, srt, genes, out.dir) {
 }
 
 ## ------------------------------------------------------------------------
+## Plots top DE genes in 3D Monocle
 Pseudotime3DTopDiff <- function(mon, srt, mark, out.dir, n) {
   mark %>% group_by(cluster) %>% top_n(n, avg_logFC) -> topn
   for(i in unique(topn$cluster)) {
