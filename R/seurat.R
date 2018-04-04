@@ -9,6 +9,7 @@ FeatureAll <- function(srt, marker.genes, out.dir) {
   }
 }
 
+# Plots the top n DE genes (default n = 10)
 FeatureTopDiff <- function(srt, mark, out.dir, n = 10) {
   mark %>% group_by(cluster) %>% top_n(n, avg_logFC) -> topn
   for(i in unique(topn$cluster)) {
@@ -28,21 +29,22 @@ ViolinAll <- function(srt, marker.genes, out.dir) {
 }
 
 # Save all PCs
-PCAll <- function(srt, out.path) {
+PCAll <- function(srt, PCs, out.path) {
   print(out.path)
-  for(i in 1:40) {
+  for(i in PCs) {
     print(PCHeatmap(srt, pc.use = i, cells.use = 100, do.balanced = T, label.columns = F))
     dev.print(pdf, file = sprintf(paste0(out.path, "/PC%s.pdf"), i), width = 9, height = 15)
   }
   
   # Saves jackstraw as well
-  print(JackStrawPlot(srt, PCs = 1:50))
+  print(JackStrawPlot(srt, PCs = 1:ncol(srt@dr$pca@cell.embeddings)))
   dev.print(pdf, file = paste0(out.path, "/JackStraw.pdf"), width = 9, height = 25)
 }
 
 ## ------------------------------------------------------------------------
-## Heatmap of top DE genes based on average difference
-diff.heatmap <- function(srt, mark, n = 20, p.cutoff = 1e-5) {
+# Heatmap of top DE genes based on average difference
+# Default is n = 20 PCs with p < 0.01
+diff.heatmap <- function(srt, mark, n = 20, p.cutoff = 0.01) {
   mark <- mark[mark$p_val_adj < p.cutoff, ]
   mark %>% group_by(cluster) %>% top_n(n, avg_logFC) -> topn
   
@@ -167,8 +169,8 @@ PlotUnique <- function(srt, diffexp, out.dir, do.violin = F) {
 
 ## ------------------------------------------------------------------------
 ## Adds iteration to tSNE
-RunMoreTSNE <- function(srt, n.iter = 1000, pcs.use = 1:50, verbose = T) {
-    res <- Rtsne(srt@dr$pca@cell.embeddings[, pcs.use], 
+RunMoreTSNE <- function(srt, n.iter, PCs, verbose = T) {
+    res <- Rtsne(srt@dr$pca@cell.embeddings[, PCs], 
                  max_iter = n.iter, 
                  pca = F, 
                  Y_init = srt@dr$tsne@cell.embeddings,
@@ -205,7 +207,7 @@ PlotFDL <- function(srt, colors) {
 
 ## ------------------------------------------------------------------------
 ## Calculates distance between centroids of clusters in PC space
-centroiddist <- function(srt, PCs = 1:19){
+centroiddist <- function(srt, PCs){
   idents <- unique(srt@ident)
   ans <- NULL
   for(i in idents) {

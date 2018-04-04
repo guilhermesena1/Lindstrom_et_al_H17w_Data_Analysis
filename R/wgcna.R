@@ -48,6 +48,8 @@ GetGenesFromModule <- function(datExpr, power, net, which) {
 
 ## ------------------------------------------------------------------------
 ## Draws module network using igraph
+# The thresh parameter is a hard TOM value cutoff for two genes
+# to be connected
 PlotModuleNetwork <- function (datExpr, power, net, which, thresh = .01) {
   dat <- datExpr[, net$colors == which]
   IMConn <- softConnectivity(dat)

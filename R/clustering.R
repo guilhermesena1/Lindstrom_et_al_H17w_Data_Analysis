@@ -56,7 +56,7 @@ bd.mle <- function(res1, res2) {
 
 ## ------------------------------------------------------------------------
 ## Calculates Bhattacharyya Distance of two Seurat clusters by estimating Gaussian MLE
-bd.seurat <- function(srt, PCs = 1:30) {
+bd.seurat <- function(srt, PCs) {
   idents <- unique(srt@ident)
   mcl <- list()
   for(id in idents) {
