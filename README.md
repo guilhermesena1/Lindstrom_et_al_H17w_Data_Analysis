@@ -23,15 +23,17 @@ biocLite("monocle")
 ```
 
 ## Count table datasets
-Datasets are available in the 10x sparse matrix format in GEO
-https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE112570
-(download the file GSE112570_RAW.tar	in the bottom of the page)
+Datasets are available in the 10x sparse matrix format in [GEO](
+https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE112570) (download the file GSE112570_RAW.tar	in the bottom of the page)
 
 Sparse matrices can either be read using the `readMM` function in the Matrix package or the `Read10X` function in Seurat.
 
 If you wish to reanalyze the data from the raw reads (eg: Map it to a different reference or run quality control metrics), you can download the .bam files with tagged cell barcodes and UMIs directly from SRA:
 
+
 https://trace.ncbi.nlm.nih.gov/Traces/sra/?run=SRR6921770 (Kidney 1)
+
 https://trace.ncbi.nlm.nih.gov/Traces/sra/?run=SRR6921771 (Kidney 2)
+
 
 These can be converted back to fastq to run on upstream processing tools (see the [10x guidelines](https://support.10xgenomics.com/docs/bamtofastq) for instructions)
